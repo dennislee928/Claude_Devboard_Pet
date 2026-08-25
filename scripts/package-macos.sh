@@ -101,17 +101,26 @@ cp -R "$APP" "$DMG_SRC/"
 ln -s /Applications "$DMG_SRC/Applications"
 cp "$ROOT/README.md" "$DMG_SRC/"
 hdiutil create -volname "DevPet $VER" -srcfolder "$DMG_SRC" -ov -quiet -format UDZO "$DMG"
-[[ -n "$IDENTITY" ]] && codesign --force -s "$IDENTITY" "$DMG"
+if [[ -n "$IDENTITY" ]]; then codesign --force -s "$IDENTITY" "$DMG"; fi
 echo "dmg: $DMG"
 
 # ---- .pkg ---------------------------------------------------------------
 PKGROOT="$STAGE/pkgroot"
 mkdir -p "$PKGROOT/Applications" "$PKGROOT/usr/local/bin"
-cp -R "$APP" "$PKGROOT/Applications/"
+ditto "$APP" "$PKGROOT/Applications/DevPet.app"
 for f in petd petd-lite pet-hook; do
     cp "$REL/$f" "$PKGROOT/usr/local/bin/$f"
     chmod 755 "$PKGROOT/usr/local/bin/$f"
 done
+# drop quarantine / Finder attributes from the payload. macOS re-applies its
+# own com.apple.provenance, so pkgbuild still records a few AppleDouble ._
+# entries; those are inert and the installer ignores them. Code signatures
+# live inside the Mach-O, not in xattrs, so clearing these is safe.
+# (xattr has no -r on all macOS versions, so walk the tree.)
+find "$PKGROOT" -print0 | xargs -0 xattr -c 2>/dev/null || true
+if [[ -n "$IDENTITY" ]]; then
+    codesign --verify --deep --strict "$PKGROOT/Applications/DevPet.app"
+fi
 
 SCRIPTS="$STAGE/pkgscripts"
 mkdir -p "$SCRIPTS"
