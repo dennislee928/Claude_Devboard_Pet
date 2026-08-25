@@ -74,7 +74,7 @@ pub static ANIMS: [[AnimDef; 13]; 4] = [
 ];
 
 /// overlays[char][level-3] for char 0=clawd 1=beemo 2=grogu (egg has none)
-pub static OVERLAYS: [[&'static [u8]; 3]; 3] = [
+pub static OVERLAYS: [[&[u8]; 3]; 3] = [
     [include_bytes!("../assets/frames/overlay_clawd_3.png"), include_bytes!("../assets/frames/overlay_clawd_4.png"), include_bytes!("../assets/frames/overlay_clawd_5.png"), ],
     [include_bytes!("../assets/frames/overlay_beemo_3.png"), include_bytes!("../assets/frames/overlay_beemo_4.png"), include_bytes!("../assets/frames/overlay_beemo_5.png"), ],
     [include_bytes!("../assets/frames/overlay_grogu_3.png"), include_bytes!("../assets/frames/overlay_grogu_4.png"), include_bytes!("../assets/frames/overlay_grogu_5.png"), ],

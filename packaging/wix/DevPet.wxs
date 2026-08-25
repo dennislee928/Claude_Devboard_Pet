@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DevPet MSI. Per-user install (no admin prompt) into
+  %LOCALAPPDATA%\devpet\bin, which is exactly the path the Claude Code hook
+  snippet references. Publisher metadata here is what Windows shows in
+  Programs & Features and in the UAC/SmartScreen dialogs.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="DevPet"
+           Manufacturer="DevPet Project"
+           Version="$(var.Version)"
+           UpgradeCode="7B4E2E36-3C31-4C0E-9C86-2E9F4D6E9A11"
+           Scope="perUser"
+           Compressed="yes">
+
+    <SummaryInformation Description="DevPet — a desk pet that mirrors what Claude Code is doing"
+                        Manufacturer="DevPet Project" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of DevPet is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/dennislee928/Claude_Devboard_Pet" />
+    <Property Id="ARPCONTACT" Value="DevPet Project" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="DEVPETDIR" Name="devpet">
+        <Directory Id="BINDIR" Name="bin" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppMenuDir" Name="DevPet" />
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="DevPet" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentGroupRef Id="Shortcuts" />
+    </Feature>
+
+    <ComponentGroup Id="AppFiles" Directory="BINDIR">
+      <!-- Standalone edition: the whole pet runs on this PC. -->
+      <Component Id="C_petd">
+        <File Id="F_petd" Source="$(var.StageDir)\petd.exe" />
+        <RegistryValue Root="HKCU" Key="Software\DevPet" Name="petd" Type="string" Value="[BINDIR]" KeyPath="yes" />
+      </Component>
+      <!-- Firmware edition bridge: the dev board is the brain. -->
+      <Component Id="C_petdlite">
+        <File Id="F_petdlite" Source="$(var.StageDir)\petd-lite.exe" />
+        <RegistryValue Root="HKCU" Key="Software\DevPet" Name="petd-lite" Type="string" Value="[BINDIR]" KeyPath="yes" />
+      </Component>
+      <!-- Invoked by the Claude Code hooks. -->
+      <Component Id="C_pethook">
+        <File Id="F_pethook" Source="$(var.StageDir)\pet-hook.exe" />
+        <RegistryValue Root="HKCU" Key="Software\DevPet" Name="pet-hook" Type="string" Value="[BINDIR]" KeyPath="yes" />
+      </Component>
+      <Component Id="C_hooksnippet">
+        <File Id="F_hooksnippet" Source="$(var.StageDir)\settings.snippet.json" />
+        <RegistryValue Root="HKCU" Key="Software\DevPet" Name="hooks" Type="string" Value="[BINDIR]" KeyPath="yes" />
+      </Component>
+      <Component Id="C_setup">
+        <File Id="F_setup" Source="$(var.StageDir)\setup.ps1" />
+        <RegistryValue Root="HKCU" Key="Software\DevPet" Name="setup" Type="string" Value="[BINDIR]" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="Shortcuts">
+      <Component Id="C_MenuShortcut" Directory="AppMenuDir" Guid="B1D0B2A6-6E23-4C4D-9A9E-3B4F0A2D5C77">
+        <Shortcut Id="S_DevPet" Name="DevPet" Description="DevPet desk pet"
+                  Target="[BINDIR]petd.exe" Arguments="--display both" WorkingDirectory="BINDIR" />
+        <Shortcut Id="S_DevPetLite" Name="DevPet (firmware edition)"
+                  Description="Bridge to a DevPet dev board that runs the pet itself"
+                  Target="[BINDIR]petd-lite.exe" Arguments="--display both" WorkingDirectory="BINDIR" />
+        <RemoveFolder Id="R_AppMenuDir" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\DevPet" Name="menu" Type="string" Value="1" KeyPath="yes" />
+      </Component>
+      <!-- Silent start at login: petd is a GUI-subsystem binary, so no console
+           window ever appears. The petd flag "uninstall-autostart" removes it. -->
+      <Component Id="C_Autostart" Directory="BINDIR" Guid="0F4B0F3C-6C4B-4B7B-9E4A-71B7B2F0D9C2">
+        <RegistryValue Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                       Name="DevPet" Type="string" Value="&quot;[BINDIR]petd.exe&quot; --display both" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Package>
+</Wix>

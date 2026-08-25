@@ -1,23 +1,77 @@
 {
-  "//": "Merge this into %USERPROFILE%\\.claude\\settings.json (or a project's .claude/settings.json). Run install.ps1 first so pet-hook.exe exists at this path.",
+  "//": "Windows. Merge this into %USERPROFILE%\\.claude\\settings.json (or a project's .claude/settings.json). Run install.ps1 or the installer first so pet-hook.exe exists at this path.",
   "hooks": {
     "SessionStart": [
-      { "hooks": [{ "type": "command", "command": "\"%LOCALAPPDATA%\\devpet\\bin\\pet-hook.exe\"" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"%LOCALAPPDATA%\\devpet\\bin\\pet-hook.exe\""
+          }
+        ]
+      }
     ],
     "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "\"%LOCALAPPDATA%\\devpet\\bin\\pet-hook.exe\"" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"%LOCALAPPDATA%\\devpet\\bin\\pet-hook.exe\""
+          }
+        ]
+      }
     ],
     "PreToolUse": [
-      { "matcher": "*", "hooks": [{ "type": "command", "command": "\"%LOCALAPPDATA%\\devpet\\bin\\pet-hook.exe\"" }] }
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"%LOCALAPPDATA%\\devpet\\bin\\pet-hook.exe\""
+          }
+        ]
+      }
     ],
     "PostToolUse": [
-      { "matcher": "*", "hooks": [{ "type": "command", "command": "\"%LOCALAPPDATA%\\devpet\\bin\\pet-hook.exe\"" }] }
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"%LOCALAPPDATA%\\devpet\\bin\\pet-hook.exe\""
+          }
+        ]
+      }
     ],
     "Notification": [
-      { "hooks": [{ "type": "command", "command": "\"%LOCALAPPDATA%\\devpet\\bin\\pet-hook.exe\"" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"%LOCALAPPDATA%\\devpet\\bin\\pet-hook.exe\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"%LOCALAPPDATA%\\\\devpet\\\\bin\\\\pet-hook.exe\""
+          }
+        ]
+      }
     ],
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "\"%LOCALAPPDATA%\\devpet\\bin\\pet-hook.exe\"" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"%LOCALAPPDATA%\\devpet\\bin\\pet-hook.exe\""
+          }
+        ]
+      }
     ]
   }
 }

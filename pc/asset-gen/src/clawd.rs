@@ -265,8 +265,8 @@ pub fn anims() -> Vec<Anim> {
     v.push(Anim {
         dur_ms: 300,
         frames: vec![
-            frame(Pose { eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, claw_l: (5, 15), claw_r: (35, 15), ..Pose::default() }, |c| props::check(c)),
-            frame(Pose { bob: 1, eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, claw_l: (5, 17), claw_r: (35, 17), ..Pose::default() }, |c| props::check(c)),
+            frame(Pose { eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, claw_l: (5, 15), claw_r: (35, 15), ..Pose::default() }, props::check),
+            frame(Pose { bob: 1, eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, claw_l: (5, 17), claw_r: (35, 17) }, props::check),
         ],
     });
 
@@ -293,7 +293,7 @@ pub fn anims() -> Vec<Anim> {
         dur_ms: 160,
         frames: vec![
             frame(Pose { eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, claw_l: (5, 14), claw_r: (35, 14), ..Pose::default() }, |c| props::confetti(c, 0)),
-            frame(Pose { bob: 1, eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, claw_l: (5, 16), claw_r: (35, 16), ..Pose::default() }, |c| props::confetti(c, 1)),
+            frame(Pose { bob: 1, eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, claw_l: (5, 16), claw_r: (35, 16) }, |c| props::confetti(c, 1)),
             frame(Pose { eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, claw_l: (5, 14), claw_r: (35, 14), ..Pose::default() }, |c| props::confetti(c, 2)),
         ],
     });

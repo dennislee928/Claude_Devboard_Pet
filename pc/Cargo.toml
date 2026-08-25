@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["asset-gen", "petd", "pet-hook", "setup-stub"]
-# setup-stub needs PAYLOAD_ZIP at compile time (set by scripts\package.ps1),
+# setup-stub needs PAYLOAD_ZIP at compile time (set by scripts\package-windows.ps1),
 # so plain `cargo build`/`cargo test` skip it via default-members.
 default-members = ["asset-gen", "petd", "pet-hook"]
 

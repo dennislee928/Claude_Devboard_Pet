@@ -2,13 +2,18 @@
 param([switch]$Purge)
 
 $ErrorActionPreference = 'SilentlyContinue'
-try { Stop-Process -Name petd -Force -Confirm:$false -ErrorAction Stop } catch {}
+foreach ($p in 'petd', 'petd-lite') {
+    try { Stop-Process -Name $p -Force -Confirm:$false -ErrorAction Stop } catch {}
+}
+# drop the autostart entry the app (or the MSI) may have written
+reg delete 'HKCU\Software\Microsoft\Windows\CurrentVersion\Run' /v DevPet /f 2>$null | Out-Null
 Start-Sleep -Seconds 1
 
 Remove-Item (Join-Path $env:LOCALAPPDATA 'devpet\bin') -Recurse -Force -Confirm:$false
 Remove-Item (Join-Path $env:LOCALAPPDATA 'devpet\firmware') -Recurse -Force -Confirm:$false
 if ($Purge) { Remove-Item (Join-Path $env:APPDATA 'devpet') -Recurse -Force -Confirm:$false }
 Remove-Item (Join-Path ([Environment]::GetFolderPath('Programs')) 'DevPet.lnk') -Force -Confirm:$false
+Remove-Item (Join-Path ([Environment]::GetFolderPath('Programs')) 'DevPet (firmware edition).lnk') -Force -Confirm:$false
 Remove-Item (Join-Path ([Environment]::GetFolderPath('Startup')) 'DevPet.lnk') -Force -Confirm:$false
 
 # strip pet-hook entries from Claude Code settings

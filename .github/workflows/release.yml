@@ -1,0 +1,196 @@
+name: release
+
+# Builds every DevPet installer with the scripts in scripts/ and publishes them.
+#
+#   Windows : DevPet-<ver>.msi, DevPet-Setup-<ver>.exe, DevPet-<ver>-win64.zip
+#   macOS   : DevPet-<ver>.dmg, DevPet-<ver>.pkg, DevPet-<ver>-macos.tar.gz
+#   Linux   : DevPet-<ver>-linux-x86_64.tar.gz
+#   ESP32   : DevPet-<ver>-firmware.zip (images for both editions)
+#
+# Everything is signed with a self-signed publisher certificate created inside
+# the job (scripts/make-selfsigned-cert.*), and the public certificate is
+# published alongside the installers so users can inspect or trust it.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to build (without the leading v)
+        required: false
+        default: 0.1.0
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pc
+      - name: Linux build dependencies (serialport needs libudev, eframe needs X11/GTK)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxkbcommon-dev libudev-dev
+      - name: Rust tests (state machine, sessions, hooks, board protocol)
+        run: cargo test --manifest-path pc/Cargo.toml
+      - name: Firmware brain tests (host build, no hardware)
+        run: make -C firmware/test
+
+  firmware:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
+      - name: Regenerate sprites
+        run: cargo run --release -q --manifest-path pc/Cargo.toml -p asset-gen
+      - name: Build firmware
+        run: pio run -d firmware
+      - name: Collect images
+        run: |
+          set -euo pipefail
+          OUT=firmware-dist
+          mkdir -p "$OUT"
+          cp firmware/.pio/build/esp32doit-devkit-v1/{firmware,bootloader,partitions}.bin "$OUT/"
+          cp "$HOME"/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin "$OUT/" || true
+          cp scripts/flash-firmware.sh scripts/flash-firmware.ps1 "$OUT/"
+          cd "$OUT" && zip -r "../DevPet-${{ needs.version.outputs.version }}-firmware.zip" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: DevPet-*-firmware.zip
+
+  windows:
+    needs: [version, test]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pc
+      - name: Install the WiX v5 CLI
+        run: dotnet tool install --global wix
+      - name: Build, sign and package
+        shell: pwsh
+        run: |
+          .\scripts\package-windows.ps1 -Version ${{ needs.version.outputs.version }} -SkipFirmware -Sign
+      - name: Show signatures
+        shell: pwsh
+        run: Get-ChildItem dist -Include *.exe,*.msi -Recurse | Get-AuthenticodeSignature | Format-List Path, Status, SignerCertificate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/*.msi
+            dist/*.exe
+            dist/*.zip
+            dist/*.cer
+
+  macos:
+    needs: [version, test]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pc
+      - name: Build, sign and package
+        run: ./scripts/package-macos.sh ${{ needs.version.outputs.version }} --sign --skip-firmware
+      - name: Show signatures
+        run: |
+          codesign -dv --verbose=2 dist/DevPet.app 2>&1 | sed -n '1,12p'
+          pkgutil --check-signature dist/DevPet-*.pkg || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            dist/*.dmg
+            dist/*.pkg
+            dist/*.tar.gz
+            dist/*.cer
+
+  linux:
+    needs: [version, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pc
+      - name: Build dependencies for the desktop window
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxkbcommon-dev libudev-dev
+      - name: Package
+        run: ./scripts/package-linux.sh ${{ needs.version.outputs.version }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*.tar.gz
+
+  publish:
+    needs: [version, windows, macos, linux, firmware]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: DevPet ${{ needs.version.outputs.version }}
+          files: artifacts/**/*
+          body: |
+            ## DevPet ${{ needs.version.outputs.version }}
+
+            Two editions, both cross-platform:
+
+            * **Standalone** (`petd`) — the whole pet runs on your PC, no hardware needed.
+            * **Firmware** (`petd-lite`) — the ESP32 board is the brain: it runs the
+              state machine, the XP/growth engine and the animation. The PC side is a
+              thin bridge that can also mirror the pet onto your monitor.
+
+            | Platform | Download |
+            |---|---|
+            | Windows | `DevPet-*.msi` (per-user, no admin) or `DevPet-Setup-*.exe` |
+            | macOS | `DevPet-*.pkg` (installs + wires up hooks) or `DevPet-*.dmg` |
+            | Linux | `DevPet-*-linux-x86_64.tar.gz` (run `setup.sh`) |
+            | Board | `DevPet-*-firmware.zip` (flash with `flash-firmware.sh` / `.ps1`) |
+
+            All binaries and installers are signed with the **self-signed** publisher
+            certificate `DevPet-selfsigned.cer`, also attached here. Self-signed means
+            your OS will still warn on first launch — import the certificate into
+            Trusted Publishers (Windows) or the login keychain (macOS) if you want the
+            warning to go away.

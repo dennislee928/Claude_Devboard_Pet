@@ -90,11 +90,11 @@ fn main() {
                             let mut gain = state::xp_for(&ev);
                             // interaction XP is rate-limited so it can't be farmed
                             match ev {
-                                Event::Petted if last_pet_xp.map_or(true, |t| now - t > Duration::from_secs(60)) => {
+                                Event::Petted if last_pet_xp.is_none_or(|t| now - t > Duration::from_secs(60)) => {
                                     last_pet_xp = Some(now);
                                     gain += 1;
                                 }
-                                Event::Feed if last_feed_xp.map_or(true, |t| now - t > Duration::from_secs(600)) => {
+                                Event::Feed if last_feed_xp.is_none_or(|t| now - t > Duration::from_secs(600)) => {
                                     last_feed_xp = Some(now);
                                     gain += 5;
                                 }

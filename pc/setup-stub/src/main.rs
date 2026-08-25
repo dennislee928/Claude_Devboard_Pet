@@ -1,5 +1,5 @@
 //! devpet-setup: self-extracting installer. The DevPet payload zip is embedded
-//! at build time (PAYLOAD_ZIP env var, set by scripts\package.ps1); running
+//! at build time (PAYLOAD_ZIP env var, set by scripts\package-windows.ps1); running
 //! the exe extracts it to a temp folder and hands off to setup.ps1.
 
 use std::io::{BufRead, Write};

@@ -3,3 +3,5 @@ firmware/.pio/
 dist/
 *.writetest
 total_clean.sh
+fwtest
+firmware/test/fwtest

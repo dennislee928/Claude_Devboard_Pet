@@ -1,0 +1,26 @@
+{
+  "//": "macOS / Linux. Merge into ~/.claude/settings.json (or a project's .claude/settings.json). If you installed the .pkg, replace $HOME/.local/share/devpet/bin/pet-hook with /usr/local/bin/pet-hook. scripts/setup.sh does this merge for you.",
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "\"$HOME/.local/share/devpet/bin/pet-hook\"" }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "\"$HOME/.local/share/devpet/bin/pet-hook\"" }] }
+    ],
+    "PreToolUse": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "\"$HOME/.local/share/devpet/bin/pet-hook\"" }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "\"$HOME/.local/share/devpet/bin/pet-hook\"" }] }
+    ],
+    "Notification": [
+      { "hooks": [{ "type": "command", "command": "\"$HOME/.local/share/devpet/bin/pet-hook\"" }] }
+    ],
+    "SubagentStop": [
+      { "hooks": [{ "type": "command", "command": "\"$HOME/.local/share/devpet/bin/pet-hook\"" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "\"$HOME/.local/share/devpet/bin/pet-hook\"" }] }
+    ]
+  }
+}

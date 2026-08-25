@@ -232,8 +232,8 @@ pub fn anims() -> Vec<Anim> {
     v.push(Anim {
         dur_ms: 300,
         frames: vec![
-            frame(Pose { face: Face::Happy, arms: Arms::Up, ..Pose::default() }, |c| props::check(c)),
-            frame(Pose { bob: 1, face: Face::Happy, arms: Arms::Up, ..Pose::default() }, |c| props::check(c)),
+            frame(Pose { face: Face::Happy, arms: Arms::Up, ..Pose::default() }, props::check),
+            frame(Pose { bob: 1, face: Face::Happy, arms: Arms::Up }, props::check),
         ],
     });
 
@@ -260,7 +260,7 @@ pub fn anims() -> Vec<Anim> {
         dur_ms: 160,
         frames: vec![
             frame(Pose { face: Face::Happy, arms: Arms::Up, ..Pose::default() }, |c| props::confetti(c, 0)),
-            frame(Pose { bob: 1, face: Face::Happy, arms: Arms::Up, ..Pose::default() }, |c| props::confetti(c, 1)),
+            frame(Pose { bob: 1, face: Face::Happy, arms: Arms::Up }, |c| props::confetti(c, 1)),
             frame(Pose { face: Face::Happy, arms: Arms::Up, ..Pose::default() }, |c| props::confetti(c, 2)),
         ],
     });

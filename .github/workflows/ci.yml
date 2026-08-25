@@ -1,0 +1,61 @@
+name: ci
+
+# Fast checks on every push / PR: the same tests the release workflow gates on,
+# plus a release build of both editions on all three desktop platforms.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: pc
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxkbcommon-dev libudev-dev
+      - name: Sprites are up to date with their source
+        run: |
+          cargo run --release -q --manifest-path pc/Cargo.toml -p asset-gen
+          git diff --exit-code -- pc/petd/src/assets_gen.rs firmware/src/sprites_gen.h
+        shell: bash
+      - run: cargo test --manifest-path pc/Cargo.toml
+      - run: cargo clippy --manifest-path pc/Cargo.toml -- -D warnings
+      - name: Build both editions (release)
+        run: cargo build --release --manifest-path pc/Cargo.toml -p petd -p pet-hook
+
+  firmware-logic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Board brain tests (host build, no hardware)
+        run: make -C firmware/test
+
+  firmware-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          sudo apt-get update && sudo apt-get install -y libudev-dev
+          pip install --upgrade platformio
+      - run: cargo run --release -q --manifest-path pc/Cargo.toml -p asset-gen
+      - run: pio run -d firmware

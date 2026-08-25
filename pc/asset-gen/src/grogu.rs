@@ -283,8 +283,8 @@ pub fn anims() -> Vec<Anim> {
     v.push(Anim {
         dur_ms: 300,
         frames: vec![
-            frame(Pose { eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, hand_l: (9, 22), hand_r: (31, 22), ear_droop: -1, ..Pose::default() }, |c| props::check(c)),
-            frame(Pose { bob: 1, eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, hand_l: (9, 24), hand_r: (31, 24), ear_droop: -1, ..Pose::default() }, |c| props::check(c)),
+            frame(Pose { eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, hand_l: (9, 22), hand_r: (31, 22), ear_droop: -1, ..Pose::default() }, props::check),
+            frame(Pose { bob: 1, eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, hand_l: (9, 24), hand_r: (31, 24), ear_droop: -1 }, props::check),
         ],
     });
 
@@ -311,7 +311,7 @@ pub fn anims() -> Vec<Anim> {
         dur_ms: 160,
         frames: vec![
             frame(Pose { eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, hand_l: (9, 21), hand_r: (31, 21), ear_droop: -2, ..Pose::default() }, |c| props::confetti(c, 0)),
-            frame(Pose { bob: 1, eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, hand_l: (9, 23), hand_r: (31, 23), ear_droop: -2, ..Pose::default() }, |c| props::confetti(c, 1)),
+            frame(Pose { bob: 1, eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, hand_l: (9, 23), hand_r: (31, 23), ear_droop: -2 }, |c| props::confetti(c, 1)),
             frame(Pose { eyes: Eyes::Happy, mouth: Mouth::Grin, blush: true, hand_l: (9, 21), hand_r: (31, 21), ear_droop: -2, ..Pose::default() }, |c| props::confetti(c, 2)),
         ],
     });

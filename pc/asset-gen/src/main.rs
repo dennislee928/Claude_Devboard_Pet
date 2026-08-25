@@ -124,7 +124,7 @@ fn main() {
     }
     rs.push_str("];\n\n");
     rs.push_str("/// overlays[char][level-3] for char 0=clawd 1=beemo 2=grogu (egg has none)\n");
-    rs.push_str("pub static OVERLAYS: [[&'static [u8]; 3]; 3] = [\n");
+    rs.push_str("pub static OVERLAYS: [[&[u8]; 3]; 3] = [\n");
     for (ci, ovls) in ovl.iter().enumerate() {
         rs.push_str("    [");
         for (li, c) in ovls.iter().enumerate() {
@@ -153,7 +153,7 @@ fn main() {
         }
         let id = next_id;
         next_id += 1;
-        write!(arrays, "static const uint8_t SPR_F{id}[{}] PROGMEM = {{\n", data.len()).unwrap();
+        writeln!(arrays, "static const uint8_t SPR_F{id}[{}] PROGMEM = {{", data.len()).unwrap();
         for chunk in data.chunks(40) {
             arrays.push_str("  ");
             for b in chunk {
@@ -182,7 +182,7 @@ fn main() {
                 write!(seqs, "{},", f.bob).unwrap();
             }
             seqs.push_str("};\n");
-            write!(table, "    {{SPR_SEQ_{ci}_{si}, SPR_BOB_{ci}_{si}, {}, {}}},\n", ids.len(), anim.dur_ms).unwrap();
+            writeln!(table, "    {{SPR_SEQ_{ci}_{si}, SPR_BOB_{ci}_{si}, {}, {}}},", ids.len(), anim.dur_ms).unwrap();
         }
         table.push_str("  },\n");
     }

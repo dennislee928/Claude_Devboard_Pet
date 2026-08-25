@@ -139,7 +139,9 @@ pub fn pretty_model(id: &str) -> String {
                 .collect::<Vec<_>>()
                 .join(".");
             let mut name = f.to_string();
-            name.get_mut(0..1).map(|c| c.make_ascii_uppercase());
+            if let Some(c) = name.get_mut(0..1) {
+                c.make_ascii_uppercase();
+            }
             if ver.is_empty() {
                 name
             } else {

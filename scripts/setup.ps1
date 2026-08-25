@@ -10,12 +10,17 @@ $bin = Join-Path $root 'bin'
 Write-Host '== DevPet setup =='
 
 # 1. stop a running daemon so the exe can be replaced
-try { Stop-Process -Name petd -Force -Confirm:$false -ErrorAction Stop; Start-Sleep -Seconds 2 } catch {}
+foreach ($p in 'petd', 'petd-lite') {
+    try { Stop-Process -Name $p -Force -Confirm:$false -ErrorAction Stop } catch {}
+}
+Start-Sleep -Seconds 2
 
 # 2. binaries + firmware images
 New-Item -ItemType Directory -Force $bin | Out-Null
-Copy-Item (Join-Path $src 'petd.exe') $bin -Force
-Copy-Item (Join-Path $src 'pet-hook.exe') $bin -Force
+foreach ($exe in 'petd.exe', 'petd-lite.exe', 'pet-hook.exe') {
+    $from = Join-Path $src $exe
+    if (Test-Path $from) { Copy-Item $from $bin -Force } else { Write-Warning "$exe missing from the package" }
+}
 if (Test-Path (Join-Path $src 'firmware')) {
     Copy-Item (Join-Path $src 'firmware') $root -Recurse -Force
 }
@@ -35,6 +40,7 @@ $hooksObj = [ordered]@{
     PreToolUse       = @(New-HookEntry $true)
     PostToolUse      = @(New-HookEntry $true)
     Notification     = @(New-HookEntry $false)
+    SubagentStop     = @(New-HookEntry $false)
     Stop             = @(New-HookEntry $false)
 }
 if (Test-Path $settings) {
@@ -63,14 +69,20 @@ $startMenu = [Environment]::GetFolderPath('Programs')
 $lnk = $ws.CreateShortcut((Join-Path $startMenu 'DevPet.lnk'))
 $lnk.TargetPath = Join-Path $bin 'petd.exe'
 $lnk.Arguments = '--display both'
-$lnk.Description = 'DevPet desk-pet daemon'
+$lnk.Description = 'DevPet desk-pet daemon (standalone edition)'
 $lnk.Save()
+$lnkLite = $ws.CreateShortcut((Join-Path $startMenu 'DevPet (firmware edition).lnk'))
+$lnkLite.TargetPath = Join-Path $bin 'petd-lite.exe'
+$lnkLite.Arguments = '--display both'
+$lnkLite.Description = 'Bridge to a DevPet dev board that runs the pet itself'
+$lnkLite.Save()
 $auto = $ws.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Startup')) 'DevPet.lnk'))
 $auto.TargetPath = Join-Path $bin 'petd.exe'
 $auto.Arguments = '--display both'
 $auto.Save()
 Write-Host 'shortcuts: Start Menu + Startup (runs at login)'
 
-# 5. launch
-Start-Process (Join-Path $bin 'petd.exe') -ArgumentList '--display','both'
+# 5. launch silently in the background (petd.exe is a GUI-subsystem binary,
+#    so this never opens a console window)
+Start-Process (Join-Path $bin 'petd.exe') -ArgumentList '--display','both' -WindowStyle Hidden
 Write-Host 'DevPet is running. Flash the board with firmware\flash-firmware.ps1 if you have not yet.'
