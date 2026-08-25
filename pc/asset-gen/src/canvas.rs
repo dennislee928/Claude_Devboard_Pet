@@ -28,6 +28,14 @@ pub const PINK: Rgb = [240, 120, 190];
 pub const EGGSHELL: Rgb = [248, 238, 218];
 pub const EGGSHELL_D: Rgb = [214, 192, 156];
 pub const PURPLE: Rgb = [150, 100, 220];
+// Grogu palette
+pub const SKIN: Rgb = [166, 196, 140];
+pub const SKIN_D: Rgb = [112, 142, 92];
+pub const SKIN_L: Rgb = [202, 224, 178];
+pub const EAR_IN: Rgb = [214, 166, 158];
+pub const ROBE: Rgb = [208, 188, 150];
+pub const ROBE_D: Rgb = [148, 128, 96];
+pub const SILVER: Rgb = [200, 204, 214];
 
 #[derive(Clone, PartialEq)]
 pub struct Canvas {
