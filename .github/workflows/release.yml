@@ -98,14 +98,22 @@ jobs:
         with:
           workspaces: pc
       - name: Install the WiX v5 CLI
-        run: dotnet tool install --global wix
+        # v6+ refuses to run until the Open Source Maintenance Fee EULA is
+        # accepted interactively, so pin the last version that does not.
+        run: dotnet tool install --global wix --version 5.0.2
       - name: Build, sign and package
         shell: pwsh
         run: |
           .\scripts\package-windows.ps1 -Version ${{ needs.version.outputs.version }} -SkipFirmware -Sign
       - name: Show signatures
         shell: pwsh
-        run: Get-ChildItem dist -Include *.exe,*.msi -Recurse | Get-AuthenticodeSignature | Format-List Path, Status, SignerCertificate
+        # Status is UnknownError for a self-signed root by design; what matters
+        # is that every artifact carries a signature from DevPet Project.
+        run: |
+          $sigs = Get-ChildItem dist -Include *.exe,*.msi -Recurse | Get-AuthenticodeSignature
+          $sigs | Format-List Path, Status, @{n='Signer';e={$_.SignerCertificate.Subject}}
+          $unsigned = $sigs | Where-Object { -not $_.SignerCertificate }
+          if ($unsigned) { throw "unsigned artifacts: $($unsigned.Path -join ', ')" }
       - uses: actions/upload-artifact@v4
         with:
           name: windows

@@ -39,14 +39,24 @@ if ($Sign) {
 }
 function Invoke-Sign([string]$Path) {
     if (-not $cert) { return }
+    # A self-signed certificate is not chained to a trusted root, so Windows
+    # reports the *verification* status as UnknownError even though the
+    # signature itself was written correctly. Only a missing SignerCertificate
+    # means signing actually failed.
     $r = Set-AuthenticodeSignature -FilePath $Path -Certificate $cert `
         -HashAlgorithm SHA256 -TimestampServer 'http://timestamp.digicert.com' `
         -ErrorAction SilentlyContinue
-    if (-not $r -or $r.Status -ne 'Valid') {
+    if (-not $r -or -not $r.SignerCertificate) {
         # no network for the timestamp server? sign without one
         $r = Set-AuthenticodeSignature -FilePath $Path -Certificate $cert -HashAlgorithm SHA256
     }
-    Write-Host ("  signed {0} [{1}]" -f (Split-Path $Path -Leaf), $r.Status)
+    $leaf = Split-Path $Path -Leaf
+    if (-not $r -or -not $r.SignerCertificate) {
+        throw "failed to sign $leaf"
+    }
+    $stamped = if ($r.TimeStamperCertificate) { 'timestamped' } else { 'no timestamp' }
+    Write-Host ("  signed {0} as {1} ({2}; verification: {3} - expected for a self-signed root)" -f `
+        $leaf, $r.SignerCertificate.Subject, $stamped, $r.Status)
 }
 
 # ---- 1. assets + release binaries ---------------------------------------
