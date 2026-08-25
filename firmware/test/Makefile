@@ -6,10 +6,14 @@ all: run
 fwtest: test_machine.cpp ../src/machine.cpp ../src/growth.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-run: fwtest
+prototest: test_proto.cpp ../src/proto.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+run: fwtest prototest
 	./fwtest
+	./prototest
 
 clean:
-	rm -f fwtest
+	rm -f fwtest prototest
 
 .PHONY: all run clean

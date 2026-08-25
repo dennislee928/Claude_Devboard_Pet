@@ -5,3 +5,4 @@ dist/
 total_clean.sh
 fwtest
 firmware/test/fwtest
+firmware/test/prototest
