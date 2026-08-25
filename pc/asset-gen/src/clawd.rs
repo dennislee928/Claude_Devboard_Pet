@@ -14,6 +14,7 @@ enum Eyes {
 }
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 enum Mouth {
     Smile,
     Frown,

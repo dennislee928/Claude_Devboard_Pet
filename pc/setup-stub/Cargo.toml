@@ -1,0 +1,11 @@
+[package]
+name = "devpet-setup"
+version.workspace = true
+edition.workspace = true
+
+# Built only by scripts\package.ps1, which sets PAYLOAD_ZIP to the packaged
+# zip path before compiling (include_bytes! embeds it). Excluded from the
+# workspace default-members so plain `cargo build` doesn't require it.
+
+[dependencies]
+zip = { version = "2", default-features = false, features = ["deflate"] }

@@ -111,16 +111,24 @@ Levels at 0 / 100 / 400 / 1200 / 3000 XP.
 
 Produces in `dist\`:
 
-- `DevPet-<ver>-win64.zip` — portable: unzip anywhere, run `setup.ps1`
-- `DevPet-Setup-<ver>.exe` — one-click installer (built with Windows IExpress):
-  installs to `%LOCALAPPDATA%\devpet`, merges Claude Code hooks, adds Start
-  Menu + login-autostart shortcuts, starts the daemon
+- `DevPet-<ver>-win64.zip` — **the recommended package**: unzip anywhere, run
+  `setup.ps1` (installs to `%LOCALAPPDATA%\devpet`, merges Claude Code hooks,
+  adds Start Menu + login-autostart shortcuts, starts the daemon)
+- `DevPet-Setup-<ver>.exe` — one-click installer (a Rust self-extracting stub,
+  `pc\setup-stub`, with the zip embedded at build time)
 
 Both include the prebuilt firmware images and `flash-firmware.ps1` (esptool,
 standard ESP32 offsets), so end users don't need PlatformIO. Remove with
 `scripts\uninstall.ps1` (`-Purge` also deletes growth/config). `package-macos.sh`
 sketches the future .app/.dmg path — the daemon needs minor porting first and
 must be built on a Mac.
+
+> ⚠ **Unsigned installer vs. endpoint protection**: on machines with strict AV
+> (e.g. Kaspersky endpoint suites — including this dev machine), an unsigned
+> self-extracting exe matches "dropper" heuristics and gets quarantined within
+> seconds of creation. The zip package is unaffected. For real distribution of
+> the exe, code-sign it (`signtool sign /fd SHA256 /f cert.pfx ...`) and/or
+> whitelist it in the AV policy.
 
 ## State detection
 

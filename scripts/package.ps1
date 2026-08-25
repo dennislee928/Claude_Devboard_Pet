@@ -67,57 +67,20 @@ if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path "$stage\*" -DestinationPath $zip
 Write-Host "zip: $zip"
 
-# 5. self-installing exe via IExpress (ships payload.zip + install.cmd)
-$ix = Join-Path $dist 'iexpress'
-if (Test-Path $ix) { Remove-Item $ix -Recurse -Force -Confirm:$false }
-New-Item -ItemType Directory -Force $ix | Out-Null
-Copy-Item $zip (Join-Path $ix 'DevPet-payload.zip')
-@'
-@echo off
-echo Installing DevPet...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$d = Join-Path $env:TEMP ('devpet_' + [guid]::NewGuid().ToString('N')); Expand-Archive -LiteralPath (Join-Path '%~dp0' 'DevPet-payload.zip') -DestinationPath $d -Force; & (Join-Path $d 'setup.ps1'); Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue"
-if errorlevel 1 ( echo Install failed. & pause & exit /b 1 )
-echo Done. DevPet is running.
-timeout /t 5 >nul
-'@ | Set-Content -Encoding ascii (Join-Path $ix 'install.cmd')
-
+# 5. self-installing exe: Rust stub with the payload zip embedded
 $setupExe = Join-Path $dist "DevPet-Setup-$Version.exe"
 if (Test-Path $setupExe) { Remove-Item $setupExe -Force }
-@"
-[Version]
-Class=IEXPRESS
-SEDVersion=3
-[Options]
-PackagePurpose=InstallApp
-ShowInstallProgramWindow=1
-HideExtractAnimation=1
-UseLongFileName=1
-InsideCompressed=0
-RebootMode=N
-TargetName=$setupExe
-FriendlyName=DevPet Setup $Version
-AppLaunched=cmd /c install.cmd
-PostInstallCmd=<None>
-AdminQuietInstCmd=
-UserQuietInstCmd=
-SourceFiles=SourceFiles
-[SourceFiles]
-SourceFiles0=$ix\
-[SourceFiles0]
-%FILE0%=
-%FILE1%=
-[Strings]
-FILE0="DevPet-payload.zip"
-FILE1="install.cmd"
-"@ | Set-Content -Encoding ascii (Join-Path $ix 'devpet.sed')
-
-& "$env:WINDIR\System32\iexpress.exe" /N /Q /M (Join-Path $ix 'devpet.sed') | Out-Null
-# iexpress launches async in some environments; wait for the output file
-for ($i = 0; $i -lt 60 -and -not (Test-Path $setupExe); $i++) { Start-Sleep -Milliseconds 500 }
-if (Test-Path $setupExe) {
+$env:PAYLOAD_ZIP = $zip
+Push-Location (Join-Path $root 'pc')
+& $cargo build --release -p devpet-setup
+$buildOk = ($LASTEXITCODE -eq 0)
+Pop-Location
+Remove-Item Env:\PAYLOAD_ZIP
+if ($buildOk) {
+    Copy-Item (Join-Path $root 'pc\target\release\devpet-setup.exe') $setupExe -Force
     Write-Host "installer: $setupExe"
 } else {
-    Write-Warning 'IExpress did not produce the installer exe; the portable zip is still valid.'
+    Write-Warning 'installer stub build failed; the portable zip is still valid.'
 }
 
 Write-Host '== done =='

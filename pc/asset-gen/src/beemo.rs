@@ -4,6 +4,7 @@ use crate::canvas::*;
 use crate::props;
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 enum Face {
     Normal(i32, i32), // pupil offset
     Happy,
