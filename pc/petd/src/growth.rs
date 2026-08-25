@@ -35,8 +35,7 @@ impl Growth {
     }
 
     pub fn state_path() -> PathBuf {
-        let base = std::env::var("APPDATA").unwrap_or_else(|_| ".".into());
-        PathBuf::from(base).join("devpet")
+        crate::paths::state_dir()
     }
 
     pub fn load() -> Self {

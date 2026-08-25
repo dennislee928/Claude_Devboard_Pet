@@ -41,6 +41,8 @@ pub enum Event {
     Petted,            // user clicked the pet
     Feed,              // user fed the pet a treat
     ToggleSleep,       // user toggled nap mode
+    SetPanel(bool),    // show/hide the status panel (handled by the dispatcher)
+    SubagentDone,      // a delegated subagent finished
 }
 
 /// XP awarded for an event (mirrors growth rules).
@@ -75,8 +77,12 @@ impl Machine {
         self.last_activity = now;
         let mut bonus = None;
         match ev {
-            Event::Prompt | Event::SessionStart => {
+            Event::Prompt => {
                 self.set(THINKING, None);
+            }
+            // a new session gets a wave before the pet settles into thinking
+            Event::SessionStart => {
+                self.set(NOTIFY, Some((now + NOTIFY_HOLD, THINKING)));
             }
             Event::ToolStart(kind) => {
                 let recent_err = self.recent_error.is_some_and(|t| now - t < RECENT_ERROR_WINDOW);
@@ -139,7 +145,11 @@ impl Machine {
                     self.set(SLEEP, None);
                 }
             }
-            Event::SetChar(_) | Event::SetWander(_) => {}
+            Event::SubagentDone => {
+                bonus = Some(2);
+                self.set(SUCCESS, Some((now + Duration::from_secs(3), THINKING)));
+            }
+            Event::SetChar(_) | Event::SetWander(_) | Event::SetPanel(_) => {}
         }
         bonus
     }
@@ -215,6 +225,16 @@ mod tests {
 
     fn t0() -> Instant {
         Instant::now()
+    }
+
+    #[test]
+    fn session_start_waves_then_thinks() {
+        let now = t0();
+        let mut m = Machine::new(now);
+        m.on_event(&Event::SessionStart, now);
+        assert_eq!(m.state, NOTIFY);
+        m.tick(now + Duration::from_secs(5));
+        assert_eq!(m.state, THINKING);
     }
 
     #[test]

@@ -2,6 +2,25 @@
 name = "petd"
 version.workspace = true
 edition.workspace = true
+description = "DevPet — a desk pet that mirrors what Claude Code is doing"
+authors = ["Dennis Lee <pcleegood@gmail.com>"]
+homepage = "https://github.com/dennislee928/Claude_Devboard_Pet"
+repository = "https://github.com/dennislee928/Claude_Devboard_Pet"
+license = "MIT"
+
+[lib]
+name = "petd"
+path = "src/lib.rs"
+
+# Standalone edition (everything on the PC).
+[[bin]]
+name = "petd"
+path = "src/bin/petd.rs"
+
+# Firmware edition bridge (the dev board is the brain).
+[[bin]]
+name = "petd-lite"
+path = "src/bin/petd-lite.rs"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -11,4 +30,5 @@ serialport = "4"
 eframe = "0.29"
 png = "0.17"
 
-[dev-dependencies]
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"

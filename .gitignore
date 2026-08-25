@@ -2,3 +2,4 @@ pc/target/
 firmware/.pio/
 dist/
 *.writetest
+total_clean.sh
