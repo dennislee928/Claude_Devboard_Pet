@@ -41,7 +41,15 @@ if [[ $SKIP_FW -eq 0 ]] && command -v pio >/dev/null 2>&1; then
 fi
 
 REL="$ROOT/pc/target/release"
-rm -rf "$APP" "$STAGE"
+# Installing the .pkg leaves a root-owned copy of the bundle behind, which a
+# later build cannot overwrite — say so instead of dying on a bare rm error.
+if [[ -e "$APP" ]] && ! rm -rf "$APP" 2>/dev/null; then
+    echo "error: cannot remove $APP" >&2
+    echo "       It is owned by another user (installing the .pkg does that)." >&2
+    echo "       Remove it and re-run:  sudo rm -rf \"$APP\"" >&2
+    exit 1
+fi
+rm -rf "$STAGE"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 # ---- .app bundle: LSUIElement keeps it out of the Dock and the app switcher,
@@ -97,9 +105,10 @@ DMG="$DIST/DevPet-$VER.dmg"
 DMG_SRC="$STAGE/dmg"
 rm -f "$DMG"
 mkdir -p "$DMG_SRC"
-cp -R "$APP" "$DMG_SRC/"
+ditto "$APP" "$DMG_SRC/DevPet.app"
 ln -s /Applications "$DMG_SRC/Applications"
 cp "$ROOT/README.md" "$DMG_SRC/"
+cp "$ROOT/scripts/OPEN-ME-FIRST.txt" "$DMG_SRC/" 2>/dev/null || true
 hdiutil create -volname "DevPet $VER" -srcfolder "$DMG_SRC" -ov -quiet -format UDZO "$DMG"
 if [[ -n "$IDENTITY" ]]; then codesign --force -s "$IDENTITY" "$DMG"; fi
 echo "dmg: $DMG"
@@ -186,10 +195,17 @@ if [[ -n "$IDENTITY" ]]; then
         mv "$PKG.signed" "$PKG"
         echo "pkg signed with the self-signed identity"
     else
-        echo "note: productsign rejected the self-signed identity; the .pkg payload is still signed"
+        # Apple only accepts a Developer ID Installer certificate it issued
+        # itself, so a self-signed .pkg cannot be signed at all. The payload
+        # binaries are signed; the wrapper is not.
+        echo "note: macOS accepts only Apple-issued installer certificates, so the .pkg"
+        echo "      wrapper stays unsigned (its binaries are signed). Install it with"
+        echo "      'Install DevPet.command' or: sudo installer -pkg <pkg> -target /"
     fi
 fi
-echo "pkg: $PKG"
+cp "$ROOT/scripts/install-macos.command" "$DIST/Install DevPet.command"
+chmod +x "$DIST/Install DevPet.command"
+echo "pkg: $PKG  (install with 'Install DevPet.command' or sudo installer -pkg)"
 
 rm -rf "$STAGE"
 ls -lh "$DIST" | sed -n '2,20p'

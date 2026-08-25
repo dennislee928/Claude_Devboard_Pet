@@ -1,0 +1,28 @@
+DevPet — first launch on macOS
+==============================
+
+DevPet is signed with its own certificate ("DevPet Project"), not with an
+Apple-issued Developer ID, because that requires a paid Apple Developer
+account. macOS therefore does not trust the signature on first launch.
+
+Drag DevPet.app to Applications, then:
+
+  1. Right-click (or Control-click) DevPet in Applications and choose "Open".
+  2. Click "Open" again in the dialog.
+
+If macOS refuses outright (Sequoia and later), go to
+System Settings -> Privacy & Security, scroll to Security, and click
+"Open Anyway" next to DevPet.
+
+Or, from a terminal:
+
+  xattr -d com.apple.quarantine /Applications/DevPet.app
+  open /Applications/DevPet.app
+
+DevPet runs with no Dock icon and no menu-bar item by design — look for the
+pet itself on your screen. Right-click the pet for its menu.
+
+To install the command-line pieces (pet-hook, which the Claude Code hooks
+call) use the .pkg instead: double-click "Install DevPet.command", or run
+
+  sudo installer -pkg DevPet-<version>.pkg -target /

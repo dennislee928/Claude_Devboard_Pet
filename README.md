@@ -54,12 +54,27 @@ Grab an installer from [Releases](https://github.com/dennislee928/Claude_Devboar
 | Linux | `DevPet-<ver>-linux-x86_64.tar.gz`, then `./setup.sh` |
 | Board | `DevPet-<ver>-firmware.zip`, then `flash-firmware.sh` / `.ps1` |
 
-Every binary and installer is signed with a **self-signed** publisher
-certificate (`DevPet-selfsigned.cer`, attached to each release) and carries
-publisher metadata — "DevPet Project" — instead of showing up as an unknown
-publisher with no identity. Self-signed is not the same as trusted: your OS
-still warns on first launch unless you import that certificate into Trusted
-Publishers (Windows) or your login keychain (macOS).
+Every binary is signed with a **self-signed** publisher certificate
+(`DevPet-selfsigned.cer`, attached to each release) and carries publisher
+metadata — "DevPet Project" — instead of showing up as an unknown publisher
+with no identity. Self-signed is not trusted, though: your OS still warns on
+first launch unless you import that certificate into Trusted Publishers
+(Windows) or your login keychain (macOS).
+
+**macOS, first launch.** Apple's `productsign` only accepts a Developer ID
+Installer certificate that Apple itself issued, so the `.pkg` *wrapper* cannot
+be signed at all with a self-signed certificate (the binaries inside it are
+signed). Gatekeeper therefore refuses a double-click on the `.pkg`. Install it
+one of these ways instead:
+
+```bash
+sudo installer -pkg DevPet-<ver>.pkg -target /     # the CLI installer skips that check
+```
+
+or double-click **`Install DevPet.command`**, which does exactly that. For the
+`.dmg`, drag DevPet to Applications, then right-click it → **Open** → **Open**
+(or System Settings → Privacy & Security → **Open Anyway** on Sequoia and
+later). `OPEN-ME-FIRST.txt` inside the disk image says the same.
 
 ### From source
 

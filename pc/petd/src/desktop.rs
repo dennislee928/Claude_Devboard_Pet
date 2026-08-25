@@ -59,6 +59,7 @@ pub fn run(shared: Arc<Mutex<Shared>>, tx: Sender<Incoming>) -> eframe::Result {
                 ovl_tex: HashMap::new(),
                 pet_fx: None,
                 wander_dir: 1.0,
+                wander_at: Instant::now(),
                 panel_pos: Pos2::new(60.0, 60.0),
             }))
         }),
@@ -73,8 +74,14 @@ struct App {
     ovl_tex: HashMap<(usize, usize), TextureHandle>,
     pet_fx: Option<Instant>, // hearts animation after petting/feeding
     wander_dir: f32,
+    wander_at: Instant,
     panel_pos: Pos2,
 }
+
+/// Wander speed in logical pixels per second — a stroll, not a dash. Frame
+/// rate must not change how fast the pet moves, so this is applied per second
+/// of real time rather than per repaint.
+const WANDER_PX_PER_SEC: f32 = 16.0;
 
 fn decode_png(bytes: &[u8]) -> egui::ColorImage {
     let decoder = png::Decoder::new(bytes);
@@ -301,10 +308,16 @@ impl eframe::App for App {
                 .is_some();
 
             // idle wandering: stroll along the screen, bounce off the edges
-            if wander && state == crate::state::IDLE && !menu_open && self.pet_fx.is_none() && !resp.dragged() {
+            let wandering = wander && state == crate::state::IDLE && !menu_open && self.pet_fx.is_none() && !resp.dragged();
+            let dt = self.wander_at.elapsed().as_secs_f32();
+            self.wander_at = Instant::now();
+            if wandering {
                 let (outer, mon) = ctx.input(|i| (i.viewport().outer_rect, i.viewport().monitor_size));
                 if let (Some(outer), Some(mon)) = (outer, mon) {
-                    let mut x = outer.min.x + 3.0 * self.wander_dir;
+                    // a long stall (the pet was asleep, or the window was
+                    // hidden) must not teleport it across the desktop
+                    let step = WANDER_PX_PER_SEC * dt.min(0.1) * self.wander_dir;
+                    let mut x = outer.min.x + step;
                     if x <= 0.0 {
                         self.wander_dir = 1.0;
                         x = 0.0;

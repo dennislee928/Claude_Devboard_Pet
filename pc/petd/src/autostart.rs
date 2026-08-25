@@ -10,12 +10,16 @@
 use std::path::PathBuf;
 use std::process::Command;
 
+#[cfg(target_os = "macos")]
 const LABEL: &str = "dev.devpet.petd";
 
 fn exe() -> std::io::Result<PathBuf> {
     std::env::current_exe()
 }
 
+/// Only the macOS LaunchAgent and the Linux systemd unit are written under
+/// the home directory; Windows uses the registry.
+#[cfg(not(windows))]
 fn home() -> PathBuf {
     std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_else(|| ".".into())
 }
