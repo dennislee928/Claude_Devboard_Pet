@@ -132,7 +132,12 @@ pub fn pretty_model(id: &str) -> String {
         Some(f) => {
             // the version sits right after the family name: claude-<family>-<ver>-<date>
             let rest = l.split(f).nth(1).unwrap_or("").trim_matches('-');
-            let ver: String = rest.split('-').take(2).filter(|p| p.chars().all(|c| c.is_ascii_digit())).collect::<Vec<_>>().join(".");
+            // version parts are 1-2 digits; an 8-digit chunk is the release date
+            let ver: String = rest
+                .split('-')
+                .take_while(|p| !p.is_empty() && p.len() <= 2 && p.chars().all(|c| c.is_ascii_digit()))
+                .collect::<Vec<_>>()
+                .join(".");
             let mut name = f.to_string();
             name.get_mut(0..1).map(|c| c.make_ascii_uppercase());
             if ver.is_empty() {

@@ -147,7 +147,7 @@ impl eframe::App for App {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let (state, chr, level, xp, next, board_connected, _board_enabled, wander, panel, backend, sessions) = {
+        let (state, chr, level, xp, next, wander, panel, sessions) = {
             let s = self.shared.lock().unwrap();
             (
                 s.state,
@@ -155,11 +155,8 @@ impl eframe::App for App {
                 s.level,
                 s.xp,
                 s.next,
-                s.board_connected,
-                s.board_enabled, // shown in the panel footer
                 s.wander,
                 s.panel,
-                s.backend,
                 s.sessions.clone(),
             )
         };
