@@ -1,0 +1,4 @@
+pc/target/
+firmware/.pio/
+dist/
+*.writetest
