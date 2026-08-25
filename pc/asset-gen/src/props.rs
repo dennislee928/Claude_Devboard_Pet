@@ -145,3 +145,20 @@ fn z_big(c: &mut Canvas, x: i32, y: i32) {
     c.set(x + 1, y + 3, BLUE);
     c.hline(x, x + 4, y + 4, BLUE);
 }
+
+/// Force-levitated pebble with a sparkle trail; phase lifts it.
+pub fn force(c: &mut Canvas, phase: usize) {
+    let y = if phase == 0 { 16 } else { 14 };
+    c.ellipse(36, y, 2, 2, GRAY_D);
+    c.set(35, y - 1, GRAY);
+    c.set(33, y + 3, SILVER);
+    c.set(37, y + 4, SILVER);
+}
+
+/// Grogu's silver knob (the "ball"), used as a level accessory.
+pub fn silver_ball(c: &mut Canvas, x: i32, y: i32) {
+    c.ellipse(x, y, 3, 3, SILVER);
+    c.ring(x, y, 3, 3, GRAY_D);
+    c.set(x - 1, y - 1, WHITE);
+    c.vline(x, y + 3, y + 4, GRAY_D);
+}

@@ -51,9 +51,21 @@ fn beemo_headphones(c: &mut Canvas) {
     c.rect(30, 10, 2, 5, BLUE);
 }
 
-/// Returns overlays[char][level] where char: 0=clawd 1=beemo, level index 0..=2
-/// maps to levels 3, 4, 5. Level 2 has no accessory; egg never has one.
-pub fn overlays() -> [[Canvas; 3]; 2] {
+fn grogu_pendant(c: &mut Canvas) {
+    c.hline(16, 24, 24, SILVER);
+    c.set(20, 25, SILVER);
+    c.rect(19, 26, 3, 3, YELLOW);
+    c.set(20, 27, ORANGE_D);
+}
+
+fn grogu_ball(c: &mut Canvas) {
+    crate::props::silver_ball(c, 33, 24);
+}
+
+/// Returns overlays[char][level] where char: 0=clawd 1=beemo 2=grogu, level
+/// index 0..=2 maps to levels 3, 4, 5. Level 2 has no accessory; the egg
+/// (character index 3) never has one.
+pub fn overlays() -> [[Canvas; 3]; 3] {
     let mut clawd3 = Canvas::new();
     clawd_tie(&mut clawd3);
     let mut clawd4 = clawd3.clone();
@@ -68,5 +80,12 @@ pub fn overlays() -> [[Canvas; 3]; 2] {
     let mut beemo5 = beemo4.clone();
     crown(&mut beemo5, 2);
 
-    [[clawd3, clawd4, clawd5], [beemo3, beemo4, beemo5]]
+    let mut grogu3 = Canvas::new();
+    grogu_pendant(&mut grogu3);
+    let mut grogu4 = grogu3.clone();
+    grogu_ball(&mut grogu4);
+    let mut grogu5 = grogu4.clone();
+    crown(&mut grogu5, 4);
+
+    [[clawd3, clawd4, clawd5], [beemo3, beemo4, beemo5], [grogu3, grogu4, grogu5]]
 }

@@ -3,14 +3,14 @@
 pub const STATE_NAMES: [&str; 13] = [
     "idle", "coding", "thinking", "searching", "testing", "building", "debugging", "error", "success", "waiting", "notify", "celebrating", "sleep", 
 ];
-pub const CHAR_NAMES: [&str; 3] = ["clawd", "beemo", "egg"];
+pub const CHAR_NAMES: [&str; 4] = ["clawd", "beemo", "grogu", "egg"];
 
 pub struct AnimDef {
     pub dur_ms: u16,
     pub frames: &'static [(&'static [u8], i8)], // (png bytes, bob px)
 }
 
-pub static ANIMS: [[AnimDef; 13]; 3] = [
+pub static ANIMS: [[AnimDef; 13]; 4] = [
     [
         AnimDef { dur_ms: 400, frames: &[(include_bytes!("../assets/frames/clawd_idle_0.png"), 0), (include_bytes!("../assets/frames/clawd_idle_1.png"), 1), (include_bytes!("../assets/frames/clawd_idle_2.png"), 0), (include_bytes!("../assets/frames/clawd_idle_3.png"), 0), ] },
         AnimDef { dur_ms: 160, frames: &[(include_bytes!("../assets/frames/clawd_coding_0.png"), 0), (include_bytes!("../assets/frames/clawd_coding_1.png"), 0), ] },
@@ -42,6 +42,21 @@ pub static ANIMS: [[AnimDef; 13]; 3] = [
         AnimDef { dur_ms: 600, frames: &[(include_bytes!("../assets/frames/beemo_sleep_0.png"), 2), (include_bytes!("../assets/frames/beemo_sleep_1.png"), 2), ] },
     ],
     [
+        AnimDef { dur_ms: 400, frames: &[(include_bytes!("../assets/frames/grogu_idle_0.png"), 0), (include_bytes!("../assets/frames/grogu_idle_1.png"), 1), (include_bytes!("../assets/frames/grogu_idle_2.png"), 0), (include_bytes!("../assets/frames/grogu_idle_3.png"), 0), ] },
+        AnimDef { dur_ms: 160, frames: &[(include_bytes!("../assets/frames/grogu_coding_0.png"), 0), (include_bytes!("../assets/frames/grogu_coding_1.png"), 0), ] },
+        AnimDef { dur_ms: 350, frames: &[(include_bytes!("../assets/frames/grogu_thinking_0.png"), 0), (include_bytes!("../assets/frames/grogu_thinking_1.png"), 1), ] },
+        AnimDef { dur_ms: 300, frames: &[(include_bytes!("../assets/frames/grogu_searching_0.png"), 0), (include_bytes!("../assets/frames/grogu_searching_1.png"), 0), ] },
+        AnimDef { dur_ms: 300, frames: &[(include_bytes!("../assets/frames/grogu_testing_0.png"), 0), (include_bytes!("../assets/frames/grogu_testing_1.png"), 0), ] },
+        AnimDef { dur_ms: 220, frames: &[(include_bytes!("../assets/frames/grogu_building_0.png"), 0), (include_bytes!("../assets/frames/grogu_building_1.png"), 1), ] },
+        AnimDef { dur_ms: 280, frames: &[(include_bytes!("../assets/frames/grogu_debugging_0.png"), 0), (include_bytes!("../assets/frames/grogu_debugging_1.png"), 0), ] },
+        AnimDef { dur_ms: 200, frames: &[(include_bytes!("../assets/frames/grogu_error_0.png"), 0), (include_bytes!("../assets/frames/grogu_error_1.png"), 1), ] },
+        AnimDef { dur_ms: 300, frames: &[(include_bytes!("../assets/frames/grogu_success_0.png"), 0), (include_bytes!("../assets/frames/grogu_success_1.png"), 1), ] },
+        AnimDef { dur_ms: 400, frames: &[(include_bytes!("../assets/frames/grogu_waiting_0.png"), 0), (include_bytes!("../assets/frames/grogu_waiting_1.png"), 1), ] },
+        AnimDef { dur_ms: 180, frames: &[(include_bytes!("../assets/frames/grogu_notify_0.png"), 0), (include_bytes!("../assets/frames/grogu_notify_1.png"), 1), ] },
+        AnimDef { dur_ms: 160, frames: &[(include_bytes!("../assets/frames/grogu_celebrating_0.png"), 0), (include_bytes!("../assets/frames/grogu_celebrating_1.png"), 1), (include_bytes!("../assets/frames/grogu_celebrating_2.png"), 0), ] },
+        AnimDef { dur_ms: 600, frames: &[(include_bytes!("../assets/frames/grogu_sleep_0.png"), 2), (include_bytes!("../assets/frames/grogu_sleep_1.png"), 2), ] },
+    ],
+    [
         AnimDef { dur_ms: 450, frames: &[(include_bytes!("../assets/frames/egg_idle_0.png"), 0), (include_bytes!("../assets/frames/egg_idle_1.png"), 0), ] },
         AnimDef { dur_ms: 260, frames: &[(include_bytes!("../assets/frames/egg_coding_0.png"), 0), (include_bytes!("../assets/frames/egg_coding_1.png"), 0), ] },
         AnimDef { dur_ms: 450, frames: &[(include_bytes!("../assets/frames/egg_thinking_0.png"), 0), (include_bytes!("../assets/frames/egg_thinking_1.png"), 0), ] },
@@ -58,8 +73,9 @@ pub static ANIMS: [[AnimDef; 13]; 3] = [
     ],
 ];
 
-/// overlays[char][level-3] for char 0=clawd 1=beemo (egg has none)
-pub static OVERLAYS: [[&'static [u8]; 3]; 2] = [
+/// overlays[char][level-3] for char 0=clawd 1=beemo 2=grogu (egg has none)
+pub static OVERLAYS: [[&'static [u8]; 3]; 3] = [
     [include_bytes!("../assets/frames/overlay_clawd_3.png"), include_bytes!("../assets/frames/overlay_clawd_4.png"), include_bytes!("../assets/frames/overlay_clawd_5.png"), ],
     [include_bytes!("../assets/frames/overlay_beemo_3.png"), include_bytes!("../assets/frames/overlay_beemo_4.png"), include_bytes!("../assets/frames/overlay_beemo_5.png"), ],
+    [include_bytes!("../assets/frames/overlay_grogu_3.png"), include_bytes!("../assets/frames/overlay_grogu_4.png"), include_bytes!("../assets/frames/overlay_grogu_5.png"), ],
 ];
