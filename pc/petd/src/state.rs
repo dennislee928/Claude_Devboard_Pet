@@ -42,6 +42,8 @@ pub enum Event {
     Feed,              // user fed the pet a treat
     ToggleSleep,       // user toggled nap mode
     SetPanel(bool),    // show/hide the status panel (handled by the dispatcher)
+    SetProvider(String, bool),   // watch / stop watching a coding agent
+    SetPrimaryProvider(String),  // which agent drives the pet
     SubagentDone,      // a delegated subagent finished
 }
 
@@ -149,7 +151,7 @@ impl Machine {
                 bonus = Some(2);
                 self.set(SUCCESS, Some((now + Duration::from_secs(3), THINKING)));
             }
-            Event::SetChar(_) | Event::SetWander(_) | Event::SetPanel(_) => {}
+            Event::SetChar(_) | Event::SetWander(_) | Event::SetPanel(_) | Event::SetProvider(..) | Event::SetPrimaryProvider(_) => {}
         }
         bonus
     }

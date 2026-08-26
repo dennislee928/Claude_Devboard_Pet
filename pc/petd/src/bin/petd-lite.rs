@@ -16,8 +16,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use petd::board::{self, BoardMsg, BoardStatus};
+use petd::providers::Hub;
 use petd::server::{self, Incoming};
-use petd::sessions;
 use petd::state::Event;
 use petd::{assets_gen, desktop, Shared};
 use std::sync::mpsc::{channel, RecvTimeoutError};
@@ -75,7 +75,7 @@ fn main() {
     // hooks -> board, plus local session tracking for the status panel
     let d_shared = shared.clone();
     std::thread::spawn(move || {
-        let mut reg = sessions::Registry::load();
+        let mut hub = Hub::new(cfg.enabled_providers(), cfg.primary(), cfg.budgets.clone());
         let mut chr = cfg.char_index();
         let mut last_poll = Instant::now() - Duration::from_secs(10);
         let mut last_status: Option<(String, String, usize)> = None;
@@ -86,7 +86,7 @@ fn main() {
             match msg {
                 Ok(m) => {
                     if let Some(h) = &m.hook {
-                        reg.apply(h, now);
+                        hub.apply_hook(h, now);
                     }
                     match m.ev {
                         Some(Event::SetChar(i)) => {
@@ -106,6 +106,19 @@ fn main() {
                             cfg.save();
                             d_shared.lock().unwrap().panel = p;
                         }
+                        Some(Event::SetProvider(id, on)) => {
+                            cfg.providers.retain(|p| *p != id);
+                            if on {
+                                cfg.providers.push(id);
+                            }
+                            cfg.save();
+                            hub.set_providers(cfg.enabled_providers(), cfg.primary());
+                        }
+                        Some(Event::SetPrimaryProvider(id)) => {
+                            cfg.primary_provider = id;
+                            cfg.save();
+                            hub.set_providers(cfg.enabled_providers(), cfg.primary());
+                        }
                         // everything else is the board's decision, not ours
                         Some(ev) => {
                             let _ = board_tx.send(BoardMsg::Event(ev));
@@ -119,24 +132,35 @@ fn main() {
 
             if last_poll.elapsed() >= Duration::from_secs(1) {
                 last_poll = now;
-                reg.poll_usage();
-                reg.save();
-                let snap = reg.snapshot(now);
+                // Codex has no hooks, so anything its rollouts gained is
+                // forwarded to the board, which owns the state machine here.
+                for ev in hub.poll() {
+                    let _ = board_tx.send(BoardMsg::Event(ev));
+                }
+                let snap = hub.snapshot(now);
                 let (model, action) = snap
                     .focus()
                     .map(|f| (f.model.clone(), f.action.clone()))
                     .unwrap_or_else(|| (String::new(), String::new()));
-                let key = (model.clone(), action.clone(), snap.active);
+                let active = snap.active();
+                let key = (model.clone(), action.clone(), active);
                 if last_status.as_ref() != Some(&key) {
                     last_status = Some(key);
                     let _ = board_tx.send(BoardMsg::Status {
                         model,
                         action,
-                        sessions: snap.active,
-                        tokens: snap.session_tokens.total(),
+                        sessions: active,
+                        tokens: snap.session_tokens().total(),
+                        percent: snap
+                            .providers
+                            .iter()
+                            .flat_map(|p| p.windows.iter())
+                            .filter_map(|w| w.used_percent)
+                            .fold(-1.0f32, f32::max)
+                            .round() as i16,
                     });
                 }
-                d_shared.lock().unwrap().sessions = snap;
+                d_shared.lock().unwrap().usage = snap;
                 if let Some(ctx) = desktop::UI_CTX.get() {
                     ctx.request_repaint();
                 }

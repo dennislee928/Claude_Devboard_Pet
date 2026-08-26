@@ -63,16 +63,26 @@ int main() {
     CHECK(m.event == -1);
 
     // --- Claude Code status strip
-    m = feed("{\"m\":\"Opus 5\",\"a\":\"Editing main.rs\",\"n\":2,\"tk\":12345}");
+    m = feed("{\"m\":\"Opus 5\",\"a\":\"Editing main.rs\",\"n\":2,\"tk\":12345,\"pc\":17}");
     CHECK(m.status);
     const PetStatus& st = proto_status();
     CHECK(!strcmp(st.model, "Opus 5"));
     CHECK(!strcmp(st.action, "Editing main.rs"));
     CHECK(st.sessions == 2);
     CHECK(st.tokens == 12345);
+    CHECK(st.percent == 17);
+
+    // a Codex session reports its own model and a real quota percentage
+    m = feed("{\"m\":\"gpt-5.6-sol\",\"a\":\"$ cargo test\",\"n\":1,\"tk\":98,\"pc\":93}");
+    CHECK(!strcmp(proto_status().model, "gpt-5.6-sol"));
+    CHECK(proto_status().percent == 93);
+
+    // no provider knows a limit: -1 means "draw no quota bar"
+    m = feed("{\"m\":\"Opus 5\",\"a\":\"Thinking\",\"n\":1,\"tk\":5,\"pc\":-1}");
+    CHECK(proto_status().percent == -1);
 
     // an over-long action must not overflow the fixed buffer
-    m = feed("{\"m\":\"Sonnet 4.5\",\"a\":\"012345678901234567890123456789012345678901234567890\",\"n\":1,\"tk\":0}");
+    m = feed("{\"m\":\"Sonnet 4.5\",\"a\":\"012345678901234567890123456789012345678901234567890\",\"n\":1,\"tk\":0,\"pc\":0}");
     CHECK(strlen(proto_status().action) == sizeof(st.action) - 1);
 
     // --- junk and partial lines are survivable

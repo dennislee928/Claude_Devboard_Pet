@@ -20,7 +20,7 @@ static const char* LEVEL_NAMES[5] = {"Egg", "Baby", "Junior", "Senior", "Legend"
 
 static uint8_t hudLevel = 1;
 static uint32_t hudXp = 0, hudNext = 100;
-static PetStatus hudStatus = {"", "", 0, 0, false};
+static PetStatus hudStatus = {"", "", 0, 0, -1, false};
 
 bool display_init() {
     tft.init();
@@ -101,12 +101,26 @@ static void draw_hud() {
     char tk[12];
     human(hudStatus.tokens, tk, sizeof(tk));
     spr.setTextColor(DIM_C, BG);
-    snprintf(line, sizeof(line), "%s  %u sess  %s tok",
-             hudStatus.model[0] ? hudStatus.model : "-", (unsigned)hudStatus.sessions, tk);
+    if (hudStatus.percent >= 0) {
+        snprintf(line, sizeof(line), "%s  %u sess  %s tok  %d%% used",
+                 hudStatus.model[0] ? hudStatus.model : "-", (unsigned)hudStatus.sessions, tk,
+                 (int)hudStatus.percent);
+    } else {
+        snprintf(line, sizeof(line), "%s  %u sess  %s tok",
+                 hudStatus.model[0] ? hudStatus.model : "-", (unsigned)hudStatus.sessions, tk);
+    }
     spr.drawString(line, barX, 208, 1);
 
+    // a quota bar only when something actually knows the limit
+    if (hudStatus.percent >= 0) {
+        int w = hudStatus.percent > 100 ? 200 : hudStatus.percent * 2;
+        uint16_t col = hudStatus.percent >= 90 ? 0xE924 : (hudStatus.percent >= 70 ? 0xFD20 : BAR_FG);
+        spr.fillRect(barX, 218, 200, 3, BAR_BG);
+        spr.fillRect(barX, 218, w, 3, col);
+    }
+
     spr.setTextColor(TEXT_C, BG);
-    spr.drawString(hudStatus.action, barX, 222, 1);
+    spr.drawString(hudStatus.action, barX, 224, 1);
 }
 
 void display_render(const uint8_t* frame, const uint8_t* overlay, int8_t bob, uint8_t scale) {

@@ -5,7 +5,7 @@
 //
 //   {"e":3,"t":1}                       raw event      -> firmware edition
 //   {"e":20,"c":"grogu"}                set character
-//   {"m":"Opus 5","a":"…","n":2,"tk":9} Claude Code status strip
+//   {"m":"Opus 5","a":"…","n":2,"tk":9,"pc":17}  agent status strip
 //   {"s":"coding","c":"clawd","lv":3}   fully rendered state -> standalone edition
 //
 // Anything the board decides itself is broadcast back as
@@ -20,12 +20,15 @@ struct PetMsg {
     bool status;    // true when the line carried a Claude Code status strip
 };
 
-// Claude Code status as reported by the PC, drawn under the pet.
+// Agent status as reported by the PC, drawn under the pet. `percent` is the
+// tightest usage window across the watched providers (Claude Code, Codex), or
+// -1 when nothing reports a limit.
 struct PetStatus {
     char model[20];
     char action[32];
     uint16_t sessions;
     uint32_t tokens;
+    int16_t percent;
     bool valid;
 };
 

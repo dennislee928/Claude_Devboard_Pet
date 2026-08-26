@@ -4,7 +4,7 @@
 
 static char buf[256];
 static size_t len = 0;
-static PetStatus status = {"", "", 0, 0, false};
+static PetStatus status = {"", "", 0, 0, -1, false};
 
 // Extract "key":"value" (string) into out; returns false if key absent.
 static bool json_str(const char* line, const char* key, char* out, size_t outlen) {
@@ -77,6 +77,10 @@ static bool parse_line(const char* line, PetMsg& out) {
     }
     if (json_int(line, "tk", n)) {
         status.tokens = (uint32_t)n;
+        out.status = true;
+    }
+    if (json_int(line, "pc", n)) {
+        status.percent = (int16_t)n;
         out.status = true;
     }
 

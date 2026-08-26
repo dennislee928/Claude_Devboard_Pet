@@ -13,14 +13,17 @@
 pub mod assets_gen;
 pub mod autostart;
 pub mod board;
+pub mod codex;
 pub mod config;
 pub mod daemon;
 pub mod desktop;
 pub mod growth;
 pub mod paths;
+pub mod providers;
 pub mod server;
 pub mod sessions;
 pub mod state;
+pub mod usage;
 
 use std::sync::{Arc, Mutex};
 
@@ -39,7 +42,8 @@ pub struct Shared {
     pub panel_side: String,
     /// "standalone" or "firmware" — shown in the status panel.
     pub backend: &'static str,
-    pub sessions: sessions::Snapshot,
+    /// Every provider's live sessions and usage windows.
+    pub usage: providers::Snapshot,
 }
 
 impl Shared {
@@ -56,7 +60,7 @@ impl Shared {
             panel: cfg.panel,
             panel_side: cfg.panel_side.clone(),
             backend,
-            sessions: sessions::Snapshot::default(),
+            usage: providers::Snapshot { primary: cfg.primary_provider.clone(), ..Default::default() },
         }))
     }
 }
@@ -76,6 +80,8 @@ petd — DevPet desk pet
   --char clawd|beemo|grogu       which pet
   --panel                        open the Claude Code status panel
   --panel-side auto|left|right   which side the panel docks to
+  --provider claude|codex|both   which coding agents to watch
+  --primary claude|codex         which one drives the pet
   --wander                       stroll around the screen when idle
   --daemon                       detach and run silently in the background
   --install-autostart            start silently at every login
@@ -110,6 +116,19 @@ pub fn parse_cli(argv: Vec<String>) -> Result<Option<Cli>, String> {
                 let v = it.next().unwrap_or_default();
                 cfg.character = v.clone();
                 passthrough.extend(["--char".into(), v]);
+            }
+            "--provider" => {
+                let v = it.next().unwrap_or_default();
+                cfg.providers = match v.as_str() {
+                    "both" | "all" => vec!["claude".into(), "codex".into()],
+                    other => vec![other.to_string()],
+                };
+                passthrough.extend(["--provider".into(), v]);
+            }
+            "--primary" => {
+                let v = it.next().unwrap_or_default();
+                cfg.primary_provider = v.clone();
+                passthrough.extend(["--primary".into(), v]);
             }
             "--panel-side" => {
                 let v = it.next().unwrap_or_default();
@@ -153,6 +172,14 @@ pub fn parse_cli(argv: Vec<String>) -> Result<Option<Cli>, String> {
     if !["auto", "left", "right"].contains(&cfg.panel_side.as_str()) {
         return Err(format!("invalid --panel-side '{}' (auto|left|right)", cfg.panel_side));
     }
+    for p in &cfg.providers {
+        if !providers::ALL.contains(&p.as_str()) {
+            return Err(format!("unknown --provider '{p}' (claude|codex|both)"));
+        }
+    }
+    if !providers::ALL.contains(&cfg.primary_provider.as_str()) {
+        return Err(format!("unknown --primary '{}' (claude|codex)", cfg.primary_provider));
+    }
 
     if autostart_remove {
         println!("{}", autostart::uninstall().map_err(|e| e.to_string())?);
@@ -183,6 +210,8 @@ mod tests {
         assert!(parse_cli(args(&["--display", "hologram"])).is_err());
         assert!(parse_cli(args(&["--char", "yoda"])).is_err());
         assert!(parse_cli(args(&["--nope"])).is_err());
+        assert!(parse_cli(args(&["--provider", "gemini"])).is_err());
+        assert!(parse_cli(args(&["--primary", "gemini"])).is_err());
     }
 
     #[test]

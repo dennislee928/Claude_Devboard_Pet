@@ -5,7 +5,7 @@
 //!   {"s":"coding","c":"grogu","lv":3}          standalone edition: PC is the brain
 //!   {"e":<code>,"t":<toolkind>}                firmware edition: raw event, board decides
 //!   {"e":20,"c":"grogu"}                       set character
-//!   {"m":"Opus 5","a":"Editing main.rs","n":2,"tk":12345}   session status for the board screen
+//!   {"m":"Opus 5","a":"Editing main.rs","n":2,"tk":12345,"pc":17}  agent status strip
 //!
 //! board -> PC
 //!   {"ok":1}                                   ack
@@ -30,8 +30,10 @@ pub enum BoardMsg {
     Event(Event),
     /// Character choice (firmware edition).
     SetChar(String),
-    /// Claude Code status strip shown under the pet on the board screen.
-    Status { model: String, action: String, sessions: usize, tokens: u64 },
+    /// Agent status strip shown under the pet on the board screen. `percent`
+    /// is the tightest usage window across the watched providers, or -1 when
+    /// nothing reports a limit.
+    Status { model: String, action: String, sessions: usize, tokens: u64, percent: i16 },
 }
 
 /// What the board reports back (firmware edition: the board is the brain).
@@ -105,8 +107,8 @@ fn encode(m: &BoardMsg) -> Option<String> {
             format!("{{\"e\":{code},\"t\":{arg}}}\n")
         }
         BoardMsg::SetChar(c) => format!("{{\"e\":20,\"c\":\"{c}\"}}\n"),
-        BoardMsg::Status { model, action, sessions, tokens } => format!(
-            "{{\"m\":\"{}\",\"a\":\"{}\",\"n\":{sessions},\"tk\":{tokens}}}\n",
+        BoardMsg::Status { model, action, sessions, tokens, percent } => format!(
+            "{{\"m\":\"{}\",\"a\":\"{}\",\"n\":{sessions},\"tk\":{tokens},\"pc\":{percent}}}\n",
             escape(model),
             escape(action)
         ),
@@ -229,9 +231,11 @@ mod tests {
             action: "Editing a\\b\nc".into(),
             sessions: 2,
             tokens: 99,
+            percent: 17,
         })
         .unwrap();
         assert!(serde_json::from_str::<serde_json::Value>(line.trim()).is_ok());
+        assert!(line.contains("\"pc\":17"));
     }
 
     #[test]

@@ -10,11 +10,14 @@
 //! Nothing here talks to the network; the transcript is a local file Claude
 //! Code already writes.
 
-use serde::{Deserialize, Serialize};
+use crate::usage::{parse_rfc3339, Ledger};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+
+/// Ledger key for everything this module tracks.
+pub const PROVIDER: &str = "claude";
 
 /// Sessions with no hook traffic for this long stop being shown.
 const STALE: Duration = Duration::from_secs(30 * 60);
@@ -37,25 +40,7 @@ pub struct HookUpdate {
     pub ended: bool,
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Tokens {
-    pub input: u64,
-    pub output: u64,
-    pub cache_read: u64,
-    pub cache_write: u64,
-}
-
-impl Tokens {
-    pub fn total(&self) -> u64 {
-        self.input + self.output + self.cache_read + self.cache_write
-    }
-    fn add(&mut self, o: &Tokens) {
-        self.input += o.input;
-        self.output += o.output;
-        self.cache_read += o.cache_read;
-        self.cache_write += o.cache_write;
-    }
-}
+pub use crate::usage::Tokens;
 
 struct Session {
     id: String,
@@ -86,37 +71,9 @@ pub struct SessionView {
     pub idle_secs: u64,
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Snapshot {
-    pub sessions: Vec<SessionView>,
-    pub active: usize,
-    pub session_tokens: Tokens,
-    /// Everything DevPet has ever seen, persisted across restarts.
-    pub lifetime_tokens: Tokens,
-    pub lifetime_prompts: u64,
-}
-
-impl Snapshot {
-    /// The single most interesting session (busy first, then most recent).
-    pub fn focus(&self) -> Option<&SessionView> {
-        self.sessions.iter().find(|s| s.busy).or_else(|| self.sessions.first())
-    }
-}
-
-#[derive(Default, Serialize, Deserialize)]
-struct Persisted {
-    lifetime: Tokens,
-    prompts: u64,
-}
-
 pub struct Registry {
     map: HashMap<String, Session>,
-    persisted: Persisted,
-    dirty: bool,
-}
-
-fn store_path() -> PathBuf {
-    crate::paths::state_dir().join("usage.json")
+    prompts: u64,
 }
 
 /// `/Users/me/code/my-app` -> `my-app`
@@ -188,24 +145,15 @@ pub fn describe(hook: &str, tool: &str, input: Option<&Value>) -> String {
     }
 }
 
-impl Registry {
-    pub fn load() -> Self {
-        let persisted = std::fs::read_to_string(store_path())
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default();
-        Registry { map: HashMap::new(), persisted, dirty: false }
+impl Default for Registry {
+    fn default() -> Self {
+        Self::new()
     }
+}
 
-    pub fn save(&mut self) {
-        if !self.dirty {
-            return;
-        }
-        self.dirty = false;
-        crate::paths::ensure_state_dir();
-        if let Ok(s) = serde_json::to_string_pretty(&self.persisted) {
-            let _ = std::fs::write(store_path(), s);
-        }
+impl Registry {
+    pub fn new() -> Self {
+        Registry { map: HashMap::new(), prompts: 0 }
     }
 
     /// Fold one hook payload into the registry.
@@ -243,8 +191,7 @@ impl Registry {
         match u.hook.as_str() {
             "UserPromptSubmit" => {
                 e.prompts += 1;
-                self.persisted.prompts += 1;
-                self.dirty = true;
+                self.prompts += 1;
             }
             "PreToolUse" => e.tool_calls += 1,
             _ => {}
@@ -253,53 +200,34 @@ impl Registry {
         e.last = now;
     }
 
-    /// Read whatever is new in each transcript: model + token usage.
-    pub fn poll_usage(&mut self) {
-        let mut lifetime_delta = Tokens::default();
+    /// Read whatever is new in each transcript: model + token usage. Every
+    /// sample is stamped with the assistant turn's own timestamp, which is
+    /// what lets the ledger bucket it into the 5-hour and weekly windows.
+    pub fn poll_usage(&mut self, ledger: &mut Ledger) {
         for s in self.map.values_mut() {
             if s.transcript.as_os_str().is_empty() {
                 continue;
             }
             let Ok(meta) = std::fs::metadata(&s.transcript) else { continue };
             let len = meta.len();
-            if len < s.offset {
-                s.offset = 0; // transcript rotated/compacted
+            let mut from = ledger.offset(&s.transcript);
+            if len < from {
+                from = 0; // transcript rotated/compacted
             }
-            if len == s.offset {
+            if len == from {
                 continue;
             }
-            let Some((text, read_to)) = read_from(&s.transcript, s.offset, len) else { continue };
-            s.offset = read_to;
-            for line in text.lines() {
-                if !line.contains("\"usage\"") && !line.contains("\"model\"") {
-                    continue;
-                }
-                let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
-                if let Some(m) = v.pointer("/message/model").and_then(Value::as_str) {
-                    s.model = pretty_model(m);
-                }
-                if let Some(u) = v.pointer("/message/usage").or_else(|| v.get("usage")) {
-                    let g = |k: &str| u.get(k).and_then(Value::as_u64).unwrap_or(0);
-                    let t = Tokens {
-                        input: g("input_tokens"),
-                        output: g("output_tokens"),
-                        cache_read: g("cache_read_input_tokens"),
-                        cache_write: g("cache_creation_input_tokens"),
-                    };
-                    if t.total() > 0 {
-                        s.tokens.add(&t);
-                        lifetime_delta.add(&t);
-                    }
-                }
+            let mut model = s.model.clone();
+            if let Some((read_to, added)) = scan_transcript(&s.transcript, from, len, ledger, Some(&mut model)) {
+                ledger.set_offset(&s.transcript, read_to);
+                s.offset = read_to;
+                s.model = model;
+                s.tokens.add(&added);
             }
-        }
-        if lifetime_delta.total() > 0 {
-            self.persisted.lifetime.add(&lifetime_delta);
-            self.dirty = true;
         }
     }
 
-    pub fn snapshot(&mut self, now: Instant) -> Snapshot {
+    pub fn sessions(&mut self, now: Instant) -> Vec<SessionView> {
         self.map.retain(|_, s| now.duration_since(s.last) < FORGET);
         let mut sessions: Vec<SessionView> = self
             .map
@@ -322,16 +250,85 @@ impl Registry {
             .collect();
         // busy first, then most recently active
         sessions.sort_by(|a, b| b.busy.cmp(&a.busy).then(a.idle_secs.cmp(&b.idle_secs)));
-        let mut session_tokens = Tokens::default();
-        for s in &sessions {
-            session_tokens.add(&s.tokens);
+        sessions
+    }
+
+    /// Prompts seen since this process started.
+    pub fn prompts(&self) -> u64 {
+        self.prompts
+    }
+}
+
+/// Fold one transcript's new bytes into the ledger, returning how far we read.
+/// Shared by live polling and the history backfill.
+fn scan_transcript(path: &std::path::Path, from: u64, to: u64, ledger: &mut Ledger, model_out: Option<&mut String>) -> Option<(u64, Tokens)> {
+    let (text, read_to) = read_from(path, from, to)?;
+    let mut model = String::new();
+    let mut total = Tokens::default();
+    for line in text.lines() {
+        if !line.contains("\"usage\"") && !line.contains("\"model\"") {
+            continue;
         }
-        Snapshot {
-            active: sessions.iter().filter(|s| s.busy).count(),
-            session_tokens,
-            lifetime_tokens: self.persisted.lifetime,
-            lifetime_prompts: self.persisted.prompts,
-            sessions,
+        let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
+        if let Some(m) = v.pointer("/message/model").and_then(Value::as_str) {
+            model = pretty_model(m);
+        }
+        if let Some(u) = v.pointer("/message/usage").or_else(|| v.get("usage")) {
+            let g = |k: &str| u.get(k).and_then(Value::as_u64).unwrap_or(0);
+            let t = Tokens {
+                input: g("input_tokens"),
+                output: g("output_tokens"),
+                cache_read: g("cache_read_input_tokens"),
+                cache_write: g("cache_creation_input_tokens"),
+            };
+            if t.total() > 0 {
+                let at = v.get("timestamp").and_then(Value::as_str).and_then(parse_rfc3339).unwrap_or_else(crate::usage::now_unix);
+                ledger.record(at, PROVIDER, &model, t);
+                total.add(&t);
+            }
+        }
+    }
+    if let Some(out) = model_out {
+        if !model.is_empty() {
+            *out = model;
+        }
+    }
+    Some((read_to, total))
+}
+
+/// Fill the weekly window from transcripts Claude Code already wrote, so the
+/// panel is correct the first time it opens rather than after a week of
+/// running. The ledger's persisted offsets keep this from double counting on
+/// the next start.
+pub fn backfill(ledger: &mut Ledger) {
+    let root = crate::paths::claude_projects_dir();
+    let cutoff = crate::usage::now_unix().saturating_sub(8 * 24 * 3600);
+    let Ok(projects) = std::fs::read_dir(&root) else { return };
+    for project in projects.flatten() {
+        let Ok(files) = std::fs::read_dir(project.path()) else { continue };
+        for f in files.flatten() {
+            let path = f.path();
+            if path.extension().is_none_or(|e| e != "jsonl") {
+                continue;
+            }
+            let Ok(md) = f.metadata() else { continue };
+            let touched = md
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            if touched < cutoff {
+                continue;
+            }
+            let from = ledger.offset(&path);
+            let len = md.len();
+            if len <= from {
+                continue;
+            }
+            if let Some((read_to, _)) = scan_transcript(&path, from, len, ledger, None) {
+                ledger.set_offset(&path, read_to);
+            }
         }
     }
 }
@@ -376,7 +373,7 @@ mod tests {
     #[test]
     fn tracks_two_sessions_independently() {
         let now = Instant::now();
-        let mut r = Registry { map: HashMap::new(), persisted: Persisted::default(), dirty: false };
+        let mut r = Registry::new();
         for (id, proj) in [("aaa", "/x/app"), ("bbb", "/x/lib")] {
             r.apply(
                 &HookUpdate {
@@ -390,39 +387,44 @@ mod tests {
                 now,
             );
         }
-        let snap = r.snapshot(now);
-        assert_eq!(snap.sessions.len(), 2);
-        assert_eq!(snap.active, 2);
-        assert_eq!(snap.lifetime_prompts, 2);
-        assert!(snap.sessions.iter().any(|s| s.project == "app"));
-        assert!(snap.sessions.iter().any(|s| s.project == "lib"));
+        let sessions = r.sessions(now);
+        assert_eq!(sessions.len(), 2);
+        assert_eq!(sessions.iter().filter(|s| s.busy).count(), 2);
+        assert_eq!(r.prompts(), 2);
+        assert!(sessions.iter().any(|s| s.project == "app"));
+        assert!(sessions.iter().any(|s| s.project == "lib"));
     }
 
     #[test]
-    fn usage_is_summed_from_the_transcript() {
+    fn usage_is_summed_from_the_transcript_into_the_ledger() {
         let dir = std::env::temp_dir().join(format!("devpet-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let tp = dir.join("t.jsonl");
         std::fs::write(
             &tp,
-            "{\"message\":{\"model\":\"claude-opus-5-20260101\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":100}}}\n",
+            "{\"timestamp\":\"2026-08-25T10:00:00.000Z\",\"message\":{\"model\":\"claude-opus-5-20260101\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":100}}}\n",
         )
         .unwrap();
         let now = Instant::now();
-        let mut r = Registry { map: HashMap::new(), persisted: Persisted::default(), dirty: false };
+        let mut r = Registry::new();
+        let mut ledger = Ledger::default();
         r.apply(
             &HookUpdate { session_id: "s1".into(), transcript: tp.display().to_string(), hook: "PreToolUse".into(), busy: true, ..Default::default() },
             now,
         );
-        r.poll_usage();
-        let snap = r.snapshot(now);
-        let s = &snap.sessions[0];
+        r.poll_usage(&mut ledger);
+        let s = &r.sessions(now)[0];
         assert_eq!(s.model, "Opus 5");
         assert_eq!(s.tokens.total(), 115);
-        assert_eq!(snap.lifetime_tokens.output, 5);
+        // the sample landed in the ledger stamped with the transcript's own time
+        assert_eq!(ledger.samples.len(), 1);
+        assert_eq!(ledger.samples[0].at, crate::usage::parse_rfc3339("2026-08-25T10:00:00.000Z").unwrap());
+        assert_eq!(ledger.samples[0].model, "Opus 5");
+        assert_eq!(ledger.lifetime.output, 5);
         // a second poll with no new bytes must not double count
-        r.poll_usage();
-        assert_eq!(r.snapshot(now).sessions[0].tokens.total(), 115);
+        r.poll_usage(&mut ledger);
+        assert_eq!(r.sessions(now)[0].tokens.total(), 115);
+        assert_eq!(ledger.samples.len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

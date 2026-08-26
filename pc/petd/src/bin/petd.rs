@@ -12,14 +12,25 @@
 
 use petd::board::{self, BoardMsg};
 use petd::growth::{self, Growth};
+use petd::providers::Hub;
 use petd::server::{self, Incoming};
-use petd::sessions;
 use petd::state::{self, Event, Machine};
 use petd::{assets_gen, desktop, Shared};
 use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 const BACKEND: &str = "standalone";
+
+/// The single usage percentage worth showing on a 240x240 screen: the tightest
+/// window across every watched provider. -1 when nothing knows a limit.
+fn board_percent(snap: &petd::providers::Snapshot) -> i16 {
+    snap.providers
+        .iter()
+        .flat_map(|p| p.windows.iter())
+        .filter_map(|w| w.used_percent)
+        .fold(-1.0f32, f32::max)
+        .round() as i16
+}
 
 fn main() {
     let cli = match petd::parse_cli(std::env::args().skip(1).collect()) {
@@ -53,7 +64,7 @@ fn main() {
     let d_shared = shared.clone();
     std::thread::spawn(move || {
         let mut machine = Machine::new(Instant::now());
-        let mut reg = sessions::Registry::load();
+        let mut hub = Hub::new(cfg.enabled_providers(), cfg.primary(), cfg.budgets.clone());
         let mut chr = cfg.char_index();
         let mut last_minute = Instant::now();
         let mut last_poll = Instant::now() - Duration::from_secs(10);
@@ -68,7 +79,7 @@ fn main() {
             match msg {
                 Ok(m) => {
                     if let Some(h) = &m.hook {
-                        reg.apply(h, now);
+                        hub.apply_hook(h, now);
                     }
                     match m.ev {
                         Some(Event::SetChar(i)) => {
@@ -85,6 +96,19 @@ fn main() {
                             cfg.panel = p;
                             cfg.save();
                             d_shared.lock().unwrap().panel = p;
+                        }
+                        Some(Event::SetProvider(id, on)) => {
+                            cfg.providers.retain(|p| *p != id);
+                            if on {
+                                cfg.providers.push(id);
+                            }
+                            cfg.save();
+                            hub.set_providers(cfg.enabled_providers(), cfg.primary());
+                        }
+                        Some(Event::SetPrimaryProvider(id)) => {
+                            cfg.primary_provider = id;
+                            cfg.save();
+                            hub.set_providers(cfg.enabled_providers(), cfg.primary());
                         }
                         Some(ev) => {
                             let mut gain = state::xp_for(&ev);
@@ -115,6 +139,28 @@ fn main() {
                 Err(RecvTimeoutError::Disconnected) => return,
             }
 
+            // Token usage comes from the providers' own transcripts; polling
+            // once a second is plenty and costs only the bytes appended since
+            // the last read. Codex has no hooks, so whatever its rollout files
+            // gained also becomes pet events — but only when Codex is the
+            // provider the user picked to drive the pet.
+            let snap = if last_poll.elapsed() >= Duration::from_secs(1) {
+                last_poll = now;
+                for ev in hub.poll() {
+                    let mut gain = state::xp_for(&ev);
+                    if let Some(bonus) = machine.on_event(&ev, now) {
+                        gain += bonus;
+                    }
+                    if gain > 0 {
+                        leveled |= growth.add(gain);
+                    }
+                }
+                growth.save();
+                Some(hub.snapshot(now))
+            } else {
+                None
+            };
+
             machine.tick(now);
             if machine.active() && last_minute.elapsed() >= Duration::from_secs(60) {
                 last_minute = now;
@@ -126,17 +172,6 @@ fn main() {
                 println!("petd: LEVEL UP -> {} ({})", growth.level(), growth::LEVEL_NAMES[(growth.level() - 1) as usize]);
             }
 
-            // token usage comes from the transcripts; polling once a second is
-            // plenty and costs only the bytes appended since the last read
-            let snap = if last_poll.elapsed() >= Duration::from_secs(1) {
-                last_poll = now;
-                reg.poll_usage();
-                reg.save();
-                Some(reg.snapshot(now))
-            } else {
-                None
-            };
-
             let level = growth.level();
             {
                 let mut s = d_shared.lock().unwrap();
@@ -146,7 +181,7 @@ fn main() {
                 s.xp = growth.xp;
                 s.next = growth.next_threshold();
                 if let Some(snap) = &snap {
-                    s.sessions = snap.clone();
+                    s.usage = snap.clone();
                 }
             }
 
@@ -165,14 +200,16 @@ fn main() {
                         .focus()
                         .map(|f| (f.model.clone(), f.action.clone()))
                         .unwrap_or_else(|| (String::new(), String::new()));
-                    let key = (model.clone(), action.clone(), snap.active);
+                    let active = snap.active();
+                    let key = (model.clone(), action.clone(), active);
                     if last_status.as_ref() != Some(&key) {
                         last_status = Some(key);
                         let _ = board_tx.send(BoardMsg::Status {
                             model,
                             action,
-                            sessions: snap.active,
-                            tokens: snap.session_tokens.total(),
+                            sessions: active,
+                            tokens: snap.session_tokens().total(),
+                            percent: board_percent(snap),
                         });
                     }
                 }

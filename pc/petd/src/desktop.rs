@@ -10,7 +10,8 @@
 use crate::assets_gen::{ANIMS, CHAR_NAMES, OVERLAYS, STATE_NAMES};
 use crate::growth::LEVEL_NAMES;
 use crate::server::Incoming;
-use crate::sessions::{Snapshot, Tokens};
+use crate::providers::{self, Snapshot};
+use crate::usage::{ModelUsage, Source, Tokens, Window};
 use crate::state::Event;
 use crate::Shared;
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, TextureHandle, TextureOptions, Vec2, ViewportBuilder, ViewportCommand, ViewportId};
@@ -154,7 +155,7 @@ impl eframe::App for App {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let (state, chr, level, xp, next, wander, panel, sessions) = {
+        let (state, chr, level, xp, next, wander, panel, usage) = {
             let s = self.shared.lock().unwrap();
             (
                 s.state,
@@ -164,13 +165,13 @@ impl eframe::App for App {
                 s.next,
                 s.wander,
                 s.panel,
-                s.sessions.clone(),
+                s.usage.clone(),
             )
         };
         let draw_char = if level == 1 { EGG } else { chr.min(PICKABLE - 1) };
         let anim = &ANIMS[draw_char][state];
         // several agents working at once makes the pet visibly busier
-        let dur = if sessions.active > 1 { (anim.dur_ms as u64 * 2 / 3).max(80) } else { anim.dur_ms as u64 };
+        let dur = if usage.active() > 1 { (anim.dur_ms as u64 * 2 / 3).max(80) } else { anim.dur_ms as u64 };
         let elapsed = self.t0.elapsed().as_millis() as u64;
         let idx = ((elapsed / dur) % anim.frames.len() as u64) as usize;
         let bob = anim.frames[idx].1 as f32;
@@ -240,8 +241,9 @@ impl eframe::App for App {
             let mut fill = bar;
             fill.set_width(bar.width() * frac);
             painter.rect_filled(fill, 3.0, Color32::from_rgb(96, 200, 110));
-            let tag = if sessions.active > 0 {
-                format!("Lv{} {} · {} · {}⚡", level, LEVEL_NAMES[(level - 1) as usize], STATE_NAMES[state], sessions.active)
+            let active = usage.active();
+            let tag = if active > 0 {
+                format!("Lv{} {} · {} · {}⚡", level, LEVEL_NAMES[(level - 1) as usize], STATE_NAMES[state], active)
             } else {
                 format!("Lv{} {} · {}", level, LEVEL_NAMES[(level - 1) as usize], STATE_NAMES[state])
             };
@@ -260,9 +262,25 @@ impl eframe::App for App {
                     ui.set_min_width(180.0);
                     ui.spacing_mut().item_spacing.y = 3.0;
                     let mut p = panel;
-                    if ui.checkbox(&mut p, "📊 Claude status panel").changed() {
+                    if ui.checkbox(&mut p, "📊 Agent status panel").changed() {
                         send(&self.tx, Event::SetPanel(p));
                     }
+                    ui.menu_button("🤖 Providers", |ui| {
+                        for id in crate::providers::ALL {
+                            let mut on = usage.get(id).is_some();
+                            if ui.checkbox(&mut on, crate::providers::display_name(id)).changed() {
+                                send(&self.tx, Event::SetProvider(id.to_string(), on));
+                            }
+                        }
+                        ui.separator();
+                        ui.small("Drives the pet:");
+                        for id in crate::providers::ALL {
+                            if ui.radio(usage.primary == id, crate::providers::display_name(id)).clicked() {
+                                send(&self.tx, Event::SetPrimaryProvider(id.to_string()));
+                                ui.close_menu();
+                            }
+                        }
+                    });
                     ui.separator();
                     ui.horizontal(|ui| {
                         for (i, name) in CHAR_NAMES.iter().enumerate().take(PICKABLE) {
@@ -362,11 +380,168 @@ fn tokens_line(t: &Tokens) -> String {
     format!("{} in · {} out · {} cached", human(t.input), human(t.output), human(t.cache_read + t.cache_write))
 }
 
-/// The status panel: what Claude Code is doing, per session, right now.
+/// "in 2h 15m" / "in 40m" — how long until a usage window resets.
+pub fn until(secs: u64) -> String {
+    match secs {
+        0 => "now".into(),
+        s if s < 3600 => format!("in {}m", s / 60 + 1),
+        s if s < 86_400 => format!("in {}h {}m", s / 3600, (s % 3600) / 60),
+        s => format!("in {}d {}h", s / 86_400, (s % 86_400) / 3600),
+    }
+}
+
+fn pct_color(p: f32) -> Color32 {
+    match p {
+        p if p >= 90.0 => Color32::from_rgb(235, 70, 70),
+        p if p >= 70.0 => Color32::from_rgb(240, 170, 60),
+        _ => Color32::from_rgb(96, 200, 110),
+    }
+}
+
+/// One usage window: a labelled bar, its percentage, and where that number
+/// came from. Estimated figures are marked so they are never mistaken for the
+/// provider's own accounting.
+fn window_row(ui: &mut egui::Ui, w: &Window, now: u64) {
+    ui.horizontal(|ui| {
+        ui.add_sized([34.0, 14.0], egui::Label::new(egui::RichText::new(&w.label).strong()));
+        match w.used_percent {
+            Some(p) => {
+                let frac = (p / 100.0).clamp(0.0, 1.0);
+                let bar = egui::ProgressBar::new(frac)
+                    .desired_width(150.0)
+                    .desired_height(12.0)
+                    .fill(pct_color(p))
+                    .text(format!("{p:.0}%"));
+                let r = ui.add(bar);
+                let note = match w.source {
+                    Source::Reported => "the provider's own figure for your plan",
+                    Source::Estimated => "estimated: measured tokens over the budget you set in config.json",
+                };
+                r.on_hover_text(note);
+                if w.source == Source::Estimated {
+                    ui.small("~");
+                }
+            }
+            None => {
+                ui.add_sized([150.0, 14.0], egui::Label::new(egui::RichText::new("no limit set").weak()));
+                ui.small("?").on_hover_text("Set budgets.five_hour_tokens / weekly_tokens in config.json to see a percentage here");
+            }
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if let Some(r) = w.resets_in(now) {
+                ui.small(until(r));
+            }
+            ui.small(human(w.tokens.total()));
+        });
+    });
+}
+
+/// Per-model weekly usage — this is where Fable's share shows up.
+fn model_row(ui: &mut egui::Ui, m: &ModelUsage) {
+    ui.horizontal(|ui| {
+        ui.add_sized([78.0, 14.0], egui::Label::new(&m.model));
+        let frac = (m.share_percent / 100.0).clamp(0.0, 1.0);
+        ui.add(
+            egui::ProgressBar::new(frac)
+                .desired_width(110.0)
+                .desired_height(11.0)
+                .fill(Color32::from_rgb(120, 150, 235))
+                .text(format!("{:.0}%", m.share_percent)),
+        )
+        .on_hover_text("share of this week's tokens");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.small(human(m.tokens.total()));
+            if let Some(b) = m.budget_percent {
+                ui.small(egui::RichText::new(format!("{b:.0}% of budget")).color(pct_color(b)));
+            }
+        });
+    });
+}
+
+fn provider_section(ui: &mut egui::Ui, p: &providers::ProviderView, primary: bool, now: u64, tx: &Arc<Mutex<Sender<Incoming>>>) {
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(&p.name).heading().size(14.0));
+        if primary {
+            ui.small(egui::RichText::new("drives the pet").weak());
+        } else if ui.small_button("make primary").clicked() {
+            send(tx, Event::SetPrimaryProvider(p.id.clone()));
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if let Some(plan) = &p.plan {
+                ui.small(egui::RichText::new(plan.to_uppercase()).weak());
+            }
+            ui.small(format!("{} working", p.active));
+        });
+    });
+
+    if !p.present {
+        ui.small(egui::RichText::new("not installed on this machine").weak());
+        return;
+    }
+
+    // current session first — the number people look at most
+    ui.horizontal(|ui| {
+        ui.add_sized([34.0, 14.0], egui::Label::new(egui::RichText::new("Now").strong()));
+        ui.small(match p.focus() {
+            Some(f) => format!("{} · {} · {}", f.project, f.model, human(f.tokens.total())),
+            None => "no session yet".to_string(),
+        });
+    });
+    for w in &p.windows {
+        window_row(ui, w, now);
+    }
+
+    if !p.models.is_empty() {
+        egui::CollapsingHeader::new(format!("Models this week ({})", p.models.len()))
+            .id_salt(format!("models_{}", p.id))
+            .default_open(p.models.len() <= 3)
+            .show(ui, |ui| {
+                for m in p.models.iter().take(6) {
+                    model_row(ui, m);
+                }
+            });
+    }
+
+    egui::CollapsingHeader::new(format!("Sessions ({})", p.sessions.len()))
+        .id_salt(format!("sessions_{}", p.id))
+        .show(ui, |ui| {
+            if p.sessions.is_empty() {
+                ui.small(if p.id == providers::CODEX {
+                    "Start a Codex session — DevPet reads ~/.codex/sessions, no setup needed."
+                } else {
+                    "Install the hooks (hooks/settings.snippet.json) and start a session."
+                });
+            }
+            for s in &p.sessions {
+                ui.horizontal(|ui| {
+                    let (dot, col) = if s.busy { ("●", Color32::from_rgb(96, 200, 110)) } else { ("○", Color32::GRAY) };
+                    ui.colored_label(col, dot);
+                    ui.label(egui::RichText::new(&s.project).strong());
+                    ui.small(format!("· {}", s.model));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.small(human(s.tokens.total()));
+                    });
+                });
+                ui.small(if s.action.is_empty() { "—".to_string() } else { s.action.clone() });
+                ui.small(
+                    egui::RichText::new(format!(
+                        "{} turns · {} tools · {} · idle {}s",
+                        s.prompts,
+                        s.tool_calls,
+                        tokens_line(&s.tokens),
+                        s.idle_secs
+                    ))
+                    .weak(),
+                );
+            }
+        });
+}
+
+/// The status panel: what every watched coding agent is doing, right now.
 fn panel_ui(ctx: &egui::Context, shared: &Arc<Mutex<Shared>>, tx: &Arc<Mutex<Sender<Incoming>>>) {
     let (level, xp, next, backend, board_connected, snap): (u8, u64, Option<u64>, &'static str, bool, Snapshot) = {
         let s = shared.lock().unwrap();
-        (s.level, s.xp, s.next, s.backend, s.board_connected, s.sessions.clone())
+        (s.level, s.xp, s.next, s.backend, s.board_connected, s.usage.clone())
     };
     egui::CentralPanel::default().show(ctx, |ui| {
         ui.horizontal(|ui| {
@@ -391,52 +566,29 @@ fn panel_ui(ctx: &egui::Context, shared: &Arc<Mutex<Shared>>, tx: &Arc<Mutex<Sen
                 }
             }
         });
-        ui.separator();
 
-        if snap.sessions.is_empty() {
-            ui.label("No Claude Code sessions seen yet.");
-            ui.small("Install the hooks (hooks/settings.snippet.json) and start a session.");
-        } else {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(format!("{} session(s)", snap.sessions.len())).strong());
-                ui.small(format!("· {} working now", snap.active));
-            });
-        }
-
-        egui::ScrollArea::vertical().max_height(150.0).show(ui, |ui| {
-            for s in &snap.sessions {
-                ui.add_space(3.0);
-                ui.horizontal(|ui| {
-                    let (dot, col) = if s.busy { ("●", Color32::from_rgb(96, 200, 110)) } else { ("○", Color32::GRAY) };
-                    ui.colored_label(col, dot);
-                    ui.label(egui::RichText::new(&s.project).strong());
-                    ui.small(format!("· {}", s.model));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.small(human(s.tokens.total()));
-                    });
-                });
-                ui.small(if s.action.is_empty() { "—".to_string() } else { s.action.clone() });
-                ui.small(
-                    egui::RichText::new(format!(
-                        "{} prompts · {} tools · {} · idle {}s",
-                        s.prompts,
-                        s.tool_calls,
-                        tokens_line(&s.tokens),
-                        s.idle_secs
-                    ))
-                    .weak(),
-                );
-                ui.separator();
+        // which agents to watch (requirement: let users choose their provider)
+        ui.horizontal(|ui| {
+            ui.small("Watching:");
+            for id in providers::ALL {
+                let mut on = snap.get(id).is_some();
+                if ui.checkbox(&mut on, providers::display_name(id)).changed() {
+                    send(tx, Event::SetProvider(id.to_string(), on));
+                }
             }
         });
+        ui.separator();
 
-        ui.horizontal(|ui| {
-            ui.small(egui::RichText::new("Tracked sessions").strong());
-            ui.small(tokens_line(&snap.session_tokens));
-        });
-        ui.horizontal(|ui| {
-            ui.small(egui::RichText::new("All time").strong());
-            ui.small(format!("{} tokens · {} prompts", human(snap.lifetime_tokens.total()), snap.lifetime_prompts));
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            if snap.providers.is_empty() {
+                ui.label("No providers enabled.");
+            }
+            for (i, p) in snap.providers.iter().enumerate() {
+                if i > 0 {
+                    ui.separator();
+                }
+                provider_section(ui, p, p.id == snap.primary, snap.now, tx);
+            }
         });
 
         ui.separator();

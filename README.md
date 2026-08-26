@@ -10,8 +10,12 @@ monitor, or both — and **grows** as you work.
 - **13 states**: idle, coding, thinking, searching, testing, building,
   debugging, error, success, waiting, notify, celebrating, sleep
 - **3 characters** + a shared egg form, all generated from one pixel-art source
-- **Live Claude Code status**: every session, the model it is running, the act
-  the agent is taking right now, and token usage per session and all-time
+- **Live agent status**: every session of **Claude Code** *and* **OpenAI Codex** —
+  the model in use, the act being taken right now, tokens for the current
+  session, the last 5 hours and the current week, and a per-model breakdown
+  (how much of this week went to Fable, Opus, gpt-5.x…)
+- **Pick your provider**: watch either agent, both, or choose which one drives
+  the pet
 - **Growth**: XP from real usage; Lv1 Egg → Lv2 Baby → Lv3 Junior → Lv4 Senior
   → Lv5 Legend, with the pet rendered bigger and better dressed each level
 - **Runs silently** in the background on Windows, macOS and Linux
@@ -112,27 +116,77 @@ That writes an `HKCU\...\Run` value on Windows, a `LaunchAgent` plist
 The macOS `.app` sets `LSUIElement`, so it never appears in the Dock or the
 app switcher.
 
-## Watching Claude Code
+## Watching your coding agents
 
-Right-click the pet → **📊 Claude status panel**. The panel is a *separate*
+Right-click the pet → **📊 Agent status panel**. The panel is a *separate*
 window docked beside the pet and repositioned whenever the pet moves, so it can
-never cover it. It shows, per session:
+never cover it.
 
-- the project, and whether that session is working right now
-- the model in use (read from the session transcript, e.g. `Opus 5`)
-- the act being taken — `Editing state.rs`, `$ cargo test -p petd`,
-  `Delegating to a subagent`, `Waiting for permission`
-- prompts, tool calls, and input / output / cached tokens for that session
-- totals across all tracked sessions and all time
+For each provider it shows:
+
+| Row | What it is |
+|---|---|
+| **Now** | the session in focus: project, model, tokens so far |
+| **5h** | tokens in the last five hours, with a percentage |
+| **Week** | tokens in the last seven days, with a percentage |
+| **Models this week** | per-model split — Fable, Opus, gpt-5.x — as a share of the week and, if you set a budget, of that budget |
+| **Sessions** | every live session: project, model, what it is doing, turns, tool calls, token split, idle time |
+
+Percentages come from two different places and the panel says which:
+
+- **Codex** reports real numbers. Its rollout files carry the plan's own
+  `rate_limits` — used percent, window length and reset time — so the 5h and
+  weekly bars are exactly what `codex` itself would tell you, plan name
+  included.
+- **Claude Code** does not write a running percentage anywhere (it only
+  records quota data at the moment a limit is actually hit). DevPet therefore
+  measures your tokens itself and shows them against a budget you set. Those
+  bars are marked `~` and say "estimated" on hover. With no budget set they
+  show tokens and no percentage rather than a number DevPet invented.
+
+Set budgets in `config.json` (see the paths below):
+
+```json
+{
+  "budgets": {
+    "five_hour_tokens": 20000000,
+    "weekly_tokens": 200000000,
+    "per_model_weekly": { "Fable 5": 50000000, "Opus 5": 120000000 }
+  }
+}
+```
+
+### Choosing a provider
+
+```
+petd --provider both --primary codex
+```
+
+`--provider` picks which agents to watch (`claude`, `codex`, or `both`) and
+`--primary` picks which one drives the pet and the board screen. Both are also
+in the panel and in the pet's right-click menu → **🤖 Providers**, and changes
+take effect immediately.
+
+### How each provider is read
+
+* **Claude Code** pushes events through its hooks (`pet-hook`), and DevPet
+  reads the session transcript JSONL it already writes for tokens and the
+  model name.
+* **Codex** has no hook system, so DevPet tails the rollout files under
+  `~/.codex/sessions/`. That means **no setup at all** — start a Codex
+  session and it appears. Turn starts, shell commands, patches, web searches
+  and turn completions all drive the pet exactly like Claude's hooks do.
+
+Either way DevPet only reads the bytes appended since its last check, and it
+remembers those offsets across restarts, so nothing is ever counted twice. On
+first run it reads back a week of history so the weekly figure is right
+immediately.
 
 The pet reacts to the same signals: it waves at a new session, thinks on a
 prompt, types while editing, runs to the flask while testing, swings a hammer
 on builds, goes X-eyed on an error and debugs afterwards, rings a bell when
 permission is pending, celebrates on level-up — and visibly speeds up when more
 than one agent is working at once.
-
-Token counts come from the session transcript JSONL that Claude Code already
-writes locally; DevPet only reads the bytes appended since its last check.
 
 ## Hardware
 
@@ -169,6 +223,8 @@ petd | petd-lite
   --char clawd|beemo|grogu       which pet
   --panel                        open the Claude Code status panel
   --panel-side auto|left|right   which side the panel docks to
+  --provider claude|codex|both   which coding agents to watch
+  --primary claude|codex         which one drives the pet
   --wander                       stroll around the screen when idle
   --daemon                       detach and run silently
   --install-autostart            start silently at every login
@@ -209,6 +265,9 @@ of the above.
 ```
 pc/asset-gen     pixel-art source for every sprite → PNGs + C header + Rust tables
 pc/petd          shared engine + both editions (petd, petd-lite)
+                 providers.rs = every agent behind one shape
+                 sessions.rs / codex.rs = Claude Code and Codex readers
+                 usage.rs = 5h / weekly / per-model token accounting
 pc/pet-hook      tiny binary the Claude Code hooks invoke
 pc/setup-stub    self-extracting Windows installer
 firmware/src     ESP32 firmware; machine.cpp + growth.cpp are the board's brain
